@@ -1,0 +1,45 @@
+#PBS -N vasp_test
+#PBS -l nodes=1:ppn=40
+#PBS -q paraque3
+#PBS -V
+#PBS -o ./
+#PBS -e ./
+#PBS -S /bin/bash
+
+#### Set intel environment###
+source /opt/intel/composer_xe_2015/bin/compilervars.sh intel64
+source /opt/intel/mkl/bin/intel64/mklvars_intel64.sh
+source /opt/intel/impi/5.0.2.044/bin64/mpivars.sh
+
+# 该脚本用于在分数坐标下均匀地将单个氢原子均匀地分散在晶胞各处。
+list="m o1 o2"
+for phase in $list
+do
+    cd $PBS_O_WORKDIR
+    NP=`cat $PBS_NODEFILE | wc -l`
+    NN=`cat $PBS_NODEFILE | sort | uniq | tee /tmp/nodes.$$ | wc -l`
+    cat $PBS_NODEFILE > /tmp/nodefile.$$    
+    
+    cd /lustre/ISSP2/fqwang/Document/Hydrogen_Diffusion_Oxides/H_optim_sites/test2||exit
+    cd "$phase"||exit
+    for ((i = 0; i < 5; i++))
+    do 
+        a=$(echo "scale = 17 ; $i * 0.2" | bc | awk '{printf "%.17f", $0}')
+        for ((j = 0; j < 5; j++))
+        do
+            b=$(echo "scale = 17 ; $j * 0.2" | bc | awk '{printf "%.17f", $0}')
+            for ((k = 0; k < 5; k++))
+            do  
+                c=$(echo "scale = 17 ; $k * 0.2" | bc | awk '{printf "%.17f", $0}')
+                cp -r "$phase"_origin "$phase"_"$i""$j""$k"
+                cd "$phase"_"$i""$j""$k"||exit
+                echo " $a $b $c T T T" >> POSCAR
+                mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std                
+                cd ..
+            done
+        done
+    done
+done
+
+rm -rf /tmp/nodefile.$$
+rm -rf /tmp/nodes.$$
