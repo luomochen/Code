@@ -37,26 +37,26 @@ do
     for((j=0;j<Cell_atom_number;j++));
     do
         line_number=$(echo "$j+10" | bc)
-        Zr_x_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $1}')
-        Zr_y_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $2}')
-        Zr_z_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $3}')
+        x_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $1}')
+        y_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $2}')
+        z_coordinate=$(sed -n "$line_number"p POSCAR | gawk '{print $3}')
         # 开始计算该过渡态下每个Zr，O原子和所有过渡态下氢原子之间的距离，以确定扩散通道上所有可动原子。
         for((k=1;k<6;k++));
         do
-            x_direct_distance=$(echo "$Zr_x_coordinate - ${H_x_coordinate[$k]}" | bc)
-            y_direct_distance=$(echo "$Zr_y_coordinate - ${H_y_coordinate[$k]}" | bc)
-            z_direct_distance=$(echo "$Zr_z_coordinate - ${H_z_coordinate[$k]}" | bc)
+            x_direct_distance=$(echo "$x_coordinate - ${H_x_coordinate[$k]}" | bc)
+            y_direct_distance=$(echo "$y_coordinate - ${H_y_coordinate[$k]}" | bc)
+            z_direct_distance=$(echo "$z_coordinate - ${H_z_coordinate[$k]}" | bc)
 
             a_square=$(echo "($x_direct_distance*$a1 + $y_direct_distance*$b1 + $z_direct_distance*$c1)^2" | bc)
             b_square=$(echo "($x_direct_distance*$a2 + $y_direct_distance*$b2 + $z_direct_distance*$c2)^2" | bc)
             c_square=$(echo "($x_direct_distance*$a3 + $y_direct_distance*$b3 + $z_direct_distance*$c3)^2" | bc)
 
-            distance=$(echo "sqrt($a_square + $b_square + $c_square)" | bc)
-            echo "$line_number $distance"
+            distance=$(echo "sqrt($a_square + $b_square + $c_square)" | bc)            
             # 只要H原子和周围原子的距离小于2埃，立刻固定并跳出循环，否则继续寻找。
             if [ "$(echo "$distance <= 2.0"|bc)" -eq 1 ] 
             then
                 sed -i "$line_number"'s/$/& T T T/' POSCAR
+                echo "$i $line_number $x_coordinate $y_coordinate $z_coordinate $distance" >> ../movable_atom.txt
                 break 
             elif [ $k -eq 5 ]
             then
