@@ -19,6 +19,7 @@ H_y_coordinate=()
 H_z_coordinate=()
 for((i=1;i<6;i++));
 do
+    cp 0$i/POSCAR 0$i/POSCAR_unfix
     sed -i 's/ *$//g' 0$i/POSCAR
     sed -i "7a\Selective dynamics" 0$i/POSCAR
     H_x_coordinate[i]=$(sed -n '$p' 0$i/POSCAR | gawk '{print $1}')
