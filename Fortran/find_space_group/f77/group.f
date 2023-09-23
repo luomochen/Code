@@ -96,7 +96,7 @@ C     Pick lattice vector NX
       ENDIF
       ENDDO
 C     Calculate its norm
-      DDV = PPRODUCT(X, X, HH)
+      DDV = PRODUCT(X, X, HH)
 C     Go over surrounding shells
       IC = 0
       DO 10 N1 = -MML,MML 
@@ -105,7 +105,7 @@ C     Go over surrounding shells
       X(1) = N1
       X(2) = N2
       X(3) = N3
-      DD = PPRODUCT(X, X, HH)
+      DD = PRODUCT(X, X, HH)
 C     If norm not equal, look for new ones;
       IF (ABS(DD-DDV).GT.EPS) GOTO 10
 C     else, increase the index
@@ -243,7 +243,7 @@ C     "Mesh density + shift:"
       READ (*, '(A50)') BUF
 C     "filename:"
       READ (*, '(A50)') BUF
-      NRK = IBZ_K_POINTS(NX,NY,NZ,SX,SY,SZ,NGROUP,ROTATION,BUF)
+      NRK = IBZ_K_POINTS(G,NX,NY,NZ,SX,SY,SZ,NGROUP,ROTATION,BUF)
       PRINT *, NRK,  ' k-points saved in ', BUF(1:INDEX(BUF,' ')-1)
       ENDDO
       
@@ -255,10 +255,10 @@ C     GENERATE IBZ K-POINT GRID FROM A REGULARLY MESHED
 C     BZ: NX, NY, NZ ARE THE NUMBER OF K-POINTS IN THREE
 C     DIRECTIONS. SX, SY, SZ SHIFT THE GRID FROM THE ORIGIN.
       INTEGER FUNCTION IBZ_K_POINTS
-     A (NX,NY,NZ,SX,SY,SZ,NGROUP,ROTATION,FILENAME)
+     A (G,NX,NY,NZ,SX,SY,SZ,NGROUP,ROTATION,FILENAME)
       IMPLICIT DOUBLE PRECISION (A-H,O-Z)
       PARAMETER (MAXK=40000,EPS=1D-4)
-      DIMENSION ROTATION(48,3,3)
+      DIMENSION G(3,3),ROTATION(48,3,3)
       DIMENSION XK(3,MAXK),RKTRAN(3),KDEGEN(MAXK)
       CHARACTER *50 FILENAME
       DATA LP_KPTS /28/
@@ -340,13 +340,13 @@ C    A   RKTRAN(1),RKTRAN(2),RKTRAN(3),dble(KDEGEN(N))/NK
       
 C     SUBROUTINE TO EVALUATE THE INNER PRODUCT OF
 C     TWO VECTORS UNDER ARBITRARY METRIC.
-      DOUBLE PRECISION FUNCTION PPRODUCT (X, Y, HH)
+      DOUBLE PRECISION FUNCTION PRODUCT (X, Y, HH)
       IMPLICIT DOUBLE PRECISION (A-H,O-Z)
       DIMENSION X(3), HH(3,3), Y(3)
-      PPRODUCT = 0.D0
+      PRODUCT = 0.D0
       DO I = 1,3
       DO J = 1,3
-      PPRODUCT = PPRODUCT + X(I) * HH(I,J) * Y(J)
+      PRODUCT = PRODUCT + X(I) * HH(I,J) * Y(J)
       ENDDO
       ENDDO
       RETURN
