@@ -1,0 +1,97 @@
+###PBS -S /bin/bash
+#PBS -N yjm-t 
+#PBS -j oe
+#PBS -l walltime=2400:00:00
+#PBS -q batch
+#PBS -l nodes=1:ppn=4
+#  -s: shell the job will run under
+#  -o: name of the queue error filename
+#  -j: merges stdout and stderr to the same file
+#  -l: resources required by the job: number of nodes and processors per node
+#  -l: resources required by the job: maximun job time length
+#############################################################################
+#########parallel mode is mpi/kpoint############
+PARALLEL=mix    
+echo $PARALLEL
+################################################
+NP=`cat ${PBS_NODEFILE} | wc -l`
+NODE_NUM=`cat $PBS_NODEFILE|uniq  |wc -l`
+NP_PER_NODE=`expr $NP / $NODE_NUM`
+#username=`yjm`
+
+#WIEN2K_RUNDIR=/public/home/yjm/yjm/bcso-later/stress/lda5/w1
+#WIEN2K_RUNDIR=/public/home/yjm/yjm/wien2k/yjm.${PBS_JOBID}
+#export SCRATCH=${WIEN2K_RUNDIR}
+
+#creat scratch dir
+if [ ! -a $WIEN2K_RUNDIR ]; then
+   echo "Scratch directory $WIEN2K_RUNDIR created."
+      mkdir -p $WIEN2K_RUNDIR
+      fi
+      cd $PBS_O_WORKDIR
+###############creating .machines################
+case $PARALLEL in
+mpi)
+        echo "granularity:1" >.machines
+       for i in `cat $PBS_NODEFILE |uniq `
+		        do
+ echo "1:"$i":"$NP_PER_NODE >> .machines
+   done
+    printf "lapw0:">> .machines
+#####lapw0 用mpi并行#############
+            for i in `cat ${PBS_NODEFILE}|uniq`
+do
+printf $i:$NP_PER_NODE" " >>.machines
+done
+#################################
+
+####lapw0用mpi并行 报错的算例用以下 mpi error lapw0########
+#        printf `cat ${PBS_NODEFILE}|uniq|head -1`:1>>.machines
+#############end#################
+printf "\n" >>.machines
+echo "extrafine:1">>.machines
+;;
+kpoint)
+echo "granularity:1" >.machines
+for i in `cat $PBS_NODEFILE`
+do
+echo "1:"$i":"1 >> .machines
+done
+ printf "lapw0:">> .machines
+#################################
+#####lapw0 用mpi并行#############
+        printf `cat ${PBS_NODEFILE}|uniq|head -1`:1>>.machines
+#############end#################
+ printf "\n" >>.machines
+echo "extrafine:1">>.machines
+;;
+mix)
+echo "granularity:1" >.machines
+for i in `cat $PBS_NODEFILE`
+do
+echo "1:"$i":"1 >> .machines
+done
+ printf "lapw0:">> .machines
+#####lapw0 用mpi并行#############
+            for i in `cat ${PBS_NODEFILE}|uniq`
+do
+printf $i:$NP_PER_NODE" " >>.machines
+done
+#################################
+#####lapw0 用mpi并行#############
+#        printf `cat ${PBS_NODEFILE}|uniq|head -1`:8>>.machines
+#############end#################
+ printf "\n" >>.machines
+echo "extrafine:1">>.machines
+sed -i 's/nextrafine:1//g' .machines
+;;
+esac
+#################end creating####################
+####### Run the parallel executable "WIEN2K"#########
+echo "extrafine:1">>.machines
+run_lapw -p -i 100
+#x lapw2 -so -qtl -p
+#run_lapw -p -NI -i 1
+#run_lapw -so -p -i 100 
+#rm -rf $WIEN2K_RUNDIR
+#
