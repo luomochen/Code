@@ -1,6 +1,18 @@
 #!/bin/bash
 
 # 该脚本用于确定过渡态计算中距离扩散原子距离较近的原子，确定结构的合理程度。
+# 自动在相同文件夹下生成一个用于排序的python脚本。
+cat > Sort_Atoms_with_Distance.py <<!
+# 读取数据为DataFrame格式，对distance参数进行排序，并覆写原txt文件。
+import pandas as pd
+import sys
+
+filename = 'Atom_distances/Atom_distances_0' + sys.argv[1] + '.txt'
+Atom_info = pd.read_table(filename,sep='\s+')
+Atom_distances_sort = Atom_info.sort_values(by='Distance')
+Atom_distances_sort.to_csv(sep='\t', index=False)
+Atom_info.sort_values(by='Distance').to_csv(filename,sep='\t', index=False)
+!
 
 mkdir Atom_distances
 for((i=1;i<6;i++));
@@ -63,3 +75,4 @@ do
     # 向python脚本传递image编号参数，并调用python脚本进行排序。
     python Sort_Atoms_with_Distance.py $i
 done
+#rm Sort_Atoms_with_Distance.py

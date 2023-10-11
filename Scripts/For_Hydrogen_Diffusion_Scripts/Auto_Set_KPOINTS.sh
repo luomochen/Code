@@ -1,6 +1,14 @@
 #!/bin/bash
 
 # 该脚本用于随晶格常数变化自动选取合适的N_1,N_2和N_3。
+# 生成KPOINTS文件头部。
+cat > KPOINTS <<!
+KPOINTS
+ 0
+Gamma
+!
+
+# 根据经验Ka=Kb=Kc=30~40。
 a1=$(sed -n '3p' POSCAR | gawk '{print $1}')
 a2=$(sed -n '3p' POSCAR | gawk '{print $2}')
 a3=$(sed -n '3p' POSCAR | gawk '{print $3}')
@@ -19,4 +27,7 @@ c3=$(sed -n '5p' POSCAR | gawk '{print $3}')
 c=$(echo "sqrt($c1^2 + $c2^2 + $c3^2)" | bc)
 N_3=$(echo "scale = 0; 40 / $c" | bc)
 
-sed -i "4c $N_1 $N_2 $N_3" KPOINTS
+cat >> KPOINTS <<!
+$N_1 $N_2 $N_3
+0 0 0
+!
