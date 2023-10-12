@@ -11,17 +11,17 @@ V_list="0.001 -0.001 0.002 -0.002 0.003 -0.003 0.004 -0.004 0.006 -0.006 0.008 -
 echo "V(eV),N(nscf),N(scf)" >> Outcome.txt
 for v in $V_list
 do
-    DAV_nscf=$(tail -n 2 OSZICAR."$v".ICHARG=11 | grep DAV | gawk '{print $2}')
-    DAV_scf=$(tail -n 2 OSZICAR."$v" | grep DAV | gawk '{print $2}')
+    DAV_nscf=$(tail -n 2 OSZICAR.V="$v".ICHARG=11 | grep DAV | gawk '{print $2}')
+    DAV_scf=$(tail -n 2 OSZICAR.V="$v" | grep DAV | gawk '{print $2}')
     if [ "$DAV_nscf" -le 150 ]
     then
-        charge_nscf=$(grep -A 4 "total charge" OUTCAR."$v".ICHARG=11 | tail -n 1 | gawk '{print $5}')
+        charge_nscf=$(grep -A 4 "total charge" OUTCAR.V="$v".ICHARG=11 | tail -n 1 | gawk '{print $5}')
     else
         charge_nscf="NaN"
     fi
     if [ "$DAV_scf" -le 150 ] 
     then
-        charge_scf=$(grep -A 4 "total charge" OUTCAR."$v" | tail -n 1 | gawk '{print $5}')
+        charge_scf=$(grep -A 4 "total charge" OUTCAR.V="$v" | tail -n 1 | gawk '{print $5}')
     else
         charge_scf="NaN"
     fi

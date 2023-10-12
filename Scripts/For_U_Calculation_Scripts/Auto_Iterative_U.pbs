@@ -16,8 +16,84 @@ NP=`cat $PBS_NODEFILE | wc -l`
 NN=`cat $PBS_NODEFILE | sort | uniq | tee /tmp/nodes.$$ | wc -l` 
 cat $PBS_NODEFILE > /tmp/nodefile.$$ 
 
-# 生成线性响应计算的基态INCAR。
-cat > INCAR.U <<!
+#-------------------------------------------------------------------------------------
+# PART0 生成python脚本
+#-------------------------------------------------------------------------------------
+
+#*******************************
+#####-----自动扩胞脚本-----#####
+#*******************************
+
+cat > Cell_Expand.py <<!
+import sys
+import ase.io.vasp
+
+x,y,z = [int(i) for i in sys.argv[1:4]]
+cell = ase.io.vasp.read_vasp("POSCAR")
+ase.io.vasp.write_vasp("POSCAR",cell*(x, y, z), direct=True,sort=True)
+!
+
+#*******************************
+#####-----线性回归脚本-----#####
+#*******************************
+
+cat > Cell_Expand.py <<!
+import pandas as pd
+import numpy as np
+
+# 读取数据并按照微扰大小进行排序。
+filename = 'Outcome.txt'
+data = pd.read_csv(filename)
+data.sort_values(by='V(eV)').to_csv(filename, index=False)
+# 将DataFrame格式的数据单列抽取出来转换为一维数组。
+nscf = np.array(data['N(nscf)'].tolist())
+scf = np.array(data['N(scf)'].tolist())
+V = np.array(data['V(eV)'].tolist())
+# 分别进行线性拟合。
+coeff_1 = np.polyfit(V, nscf, 1)
+coeff_2 = np.polyfit(V, scf, 1)
+# 分别计算r_squared。
+correlation_matrix_1 = np.corrcoef(V, nscf)
+correlation_V_nscf = correlation_matrix_1[0,1]
+r_squared_1 = correlation_V_nscf**2
+correlation_matrix_2 = np.corrcoef(V, scf)
+correlation_V_nscf = correlation_matrix_2[0,1]
+r_squared_2 = correlation_V_nscf**2
+# 计算U值，如果拟合度较差将不返回U值。
+if r_squared_1 > 0.90 and r_squared_2 > 0.90:
+    U = 1 / coeff_2[0] - 1 / coeff_1[0]
+    U = round(U,2)
+else:
+    U = "NaN"
+# 格式化输出，所有值只保留两位小数。
+output = "U: "+ str(U) + "\n" + "slope_nscf: " + str(round(coeff_1[0], 2)) + "\n" + "R^2_nscf: " + str(round(r_squared_1, 2)) \
++ "\n" + "slope_scf: " + str(round(coeff_2[0], 2)) + "\n" + "R^2_scf: " + str(round(r_squared_2, 2))
+with open(filename, 'a') as file_object:
+    file_object.write(output)
+!
+
+delta_U=5.0
+U_1=0
+cycle=0
+while "$(echo "$delta_U > 0.1"|bc)" -eq 1
+do
+#-------------------------------------------------------------------------------------
+# 循环开始
+#-------------------------------------------------------------------------------------
+cycle=$(cycle + 1)
+mkidr "$cycle"
+cp POSCAR POTCAR "$cycle"
+cd "$cycle"||exit
+U_2=$U_1
+#-------------------------------------------------------------------------------------
+# PART1 生成VASP基本输入文件
+#-------------------------------------------------------------------------------------
+
+#********************************
+#####-----线性响应INCAR-----#####
+#********************************
+
+cat > INCAR.V=0.00 <<!
 SYSTEM = UO2 AFM 
 PREC = A
 EDIFF = 1E-8
@@ -37,58 +113,133 @@ MAGMOM = 2.6 2.6 2.6 2.6 2.6 2.6 2.6 2.6  \\
 LORBIT = 11
 LMAXMIX = 4 
 !
-# 生成线性响应计算使用的KPOINTS。
-cat > KPOINTS <<!
-Gamma only 
- 0 
-Monkhorst 
- 1 1 1  
- 0 0 0 
+
+#*********************************
+#####-----结构优化INCAR-----#####
+#*********************************
+
+cat > INCAR.relax <<!
+System = UO2_Pnma_GGA
+# Electronic Relexation
+ISTART = 0
+ICHARG = 2
+IALGO = 38
+PREC = Accurate
+ENCUT = 520
+ISMEAR = 0
+SIGMA = 0.05
+ISPIN = 2
+MAGMOM = 2.6 2.6 2.6 2.6 2.6 2.6 2.6 2.6  \\ 
+         -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 \\ 
+         -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 -2.6 \\ 
+         2.6 2.6 2.6 2.6 2.6 2.6 2.6 2.6 \\ 
+         64*0.0
+NELMIN = 8
+NELM = 100
+EDIFF = 1E-6
+# Ionic Relaxation
+IBRION = 2
+NSW = 500
+POTIM = 0.5
+ISIF = 3
+EDIFFG = -1E-3
+# Surroundings
+PSTRESS = 400
 !
 
-cp INCAR.U INCAR
+#***************************
+#####-----KPOINTS-----#####
+#***************************
+
+cat > KPOINTS <<!
+KPOINTS
+ 0
+Gamma
+!
+
+# 根据经验Ka=Kb=Kc=30~40。
+a1=$(sed -n '3p' POSCAR | gawk '{print $1}')
+a2=$(sed -n '3p' POSCAR | gawk '{print $2}')
+a3=$(sed -n '3p' POSCAR | gawk '{print $3}')
+a=$(echo "sqrt($a1^2 + $a2^2 + $a3^2)" | bc)
+N_1=$(echo "scale = 0; 40 / $a" | bc)
+
+b1=$(sed -n '4p' POSCAR | gawk '{print $1}')
+b2=$(sed -n '4p' POSCAR | gawk '{print $2}')
+b3=$(sed -n '4p' POSCAR | gawk '{print $3}')
+b=$(echo "sqrt($b1^2 + $b2^2 + $b3^2)" | bc)
+N_2=$(echo "scale = 0; 40 / $b" | bc)
+
+c1=$(sed -n '5p' POSCAR | gawk '{print $1}')
+c2=$(sed -n '5p' POSCAR | gawk '{print $2}')
+c3=$(sed -n '5p' POSCAR | gawk '{print $3}')
+c=$(echo "sqrt($c1^2 + $c2^2 + $c3^2)" | bc)
+N_3=$(echo "scale = 0; 40 / $c" | bc)
+
+cat >> KPOINTS <<!
+$N_1 $N_2 $N_3
+0 0 0
+!
+#************************************
+#####-----POSCAR_supercell-----#####
+#************************************
+
+cp POSCAR POSCAR_relax
+python Cell_Expand.py 2 2 2
+sed -i '6c \ U U O' POSCAR
+sed -i '7c \ 1 31 64' POSCAR
+
+#-------------------------------------------------------------------------------------
+# PART1 线性响应计算U值
+#-------------------------------------------------------------------------------------
+
+# 不施加微扰的DFT计算。
+cp INCAR.V=0.00 INCAR
 rm WAVECAR CHGCAR
 
 mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std
 
-cp OUTCAR  OUTCAR.0
-cp OSZICAR OSZICAR.0
-cp WAVECAR WAVECAR.0
-cp CHGCAR  CHGCAR.0
+cp OUTCAR  OUTCAR.V=0.00
+cp OUTCAR  OUTCAR.V=0.00.ICHARG=11
+cp OSZICAR OSZICAR.V=0.00
+cp OSZICAR OSZICAR.V=0.00.ICHARG=11
+cp WAVECAR WAVECAR.V=0.00
+cp CHGCAR  CHGCAR.V=0.00
 
 # 此处将施加微扰，注意是对d电子还是f电子添加微扰，需要对以下所有LDAUL的值进行更改。
-list="+0.05 -0.05 +0.10 -0.10 +0.15 -0.15 +0.20 -0.20"
+list="0.01 -0.01 0.02 -0.02 0.04 -0.04 0.06 -0.06 0.08 -0.08 0.1 -0.1"
 for v in $list
 do
 
-cp INCAR.U INCAR
+# nscf计算。
+cp INCAR.V=0.00 INCAR
 cat >> INCAR <<!
-ICHARG       = 11
-
-LDAU         = .TRUE.
-LDAUTYPE     =  3
-LDAUL        =  3 -1 -1
-LDAUU        =  $v 0.00 0.00
-LDAUJ        =  $v 0.00 0.00
-LDAUPRINT    =  2
+ICHARG = 11
+LDAU = .TRUE.
+LDAUTYPE = 3
+LDAUL = 3 -1 -1
+LDAUU = $v 0.00 0.00
+LDAUJ = $v 0.00 0.00
+LDAUPRINT = 2
 !
 
-cp WAVECAR.0 WAVECAR
-cp CHGCAR.0  CHGCAR
+cp WAVECAR.V=0.00 WAVECAR
+cp CHGCAR.V=0.00  CHGCAR
 
 mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std
 
 cp OSZICAR OSZICAR.V="$v".ICHARG=11
 cp OUTCAR  OUTCAR.V="$v".ICHARG=11
 
-cp INCAR.U INCAR
+# scf计算。
+cp INCAR.V=0.00 INCAR
 cat >> INCAR <<!
-LDAU         = .TRUE.
-LDAUTYPE     =  3
-LDAUL        =  3 -1 -1
-LDAUU        =  $v 0.00 0.00
-LDAUJ        =  $v 0.00 0.00
-LDAUPRINT    =  2
+LDAU = .TRUE.
+LDAUTYPE = 3
+LDAUL = 3 -1 -1
+LDAUU = $v 0.00 0.00
+LDAUJ = $v 0.00 0.00
+LDAUPRINT = 2
 !
 
 mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std
@@ -98,5 +249,54 @@ cp OUTCAR  OUTCAR.V="$v"
 
 done
 
+# 数据处理，生成U值
+echo "V(eV),N(nscf),N(scf)" >> Outcome.txt
+for v in $list
+do
+    DAV_nscf=$(tail -n 2 OSZICAR.V="$v".ICHARG=11 | grep DAV | gawk '{print $2}')
+    DAV_scf=$(tail -n 2 OSZICAR.V="$v" | grep DAV | gawk '{print $2}')
+    if [ "$DAV_nscf" -le 150 ]
+    then
+        charge_nscf=$(grep -A 4 "total charge" OUTCAR.V="$v".ICHARG=11 | tail -n 1 | gawk '{print $5}')
+    else
+        charge_nscf="NaN"
+    fi
+    if [ "$DAV_scf" -le 150 ] 
+    then
+        charge_scf=$(grep -A 4 "total charge" OUTCAR.V="$v" | tail -n 1 | gawk '{print $5}')
+    else
+        charge_scf="NaN"
+    fi
+    echo "$v,$charge_nscf,$charge_scf" >> Outcome.txt
+done
+python Get_Fitted_U.py
+
+U_1=$(grep U Outcome.txt | gawk '{print $2}')
+delta_U=$(echo "$U_1 - $U_2" | bc)
+delta_U=${delta_U#-}
+#-----------------------------------------------------------------------------------------------------
+# PART2 结构优化
+#-----------------------------------------------------------------------------------------------------
+
+cp POSCAR_relax POSCAR
+cp INCAR_relax INCAR
+
+# 使用DFT+U进行结构优化。
+cat >> INCAR <<!
+LDAU = .TRUE.
+LDAUTYPE = 1
+LDAUL = 3 -1 -1
+LDAUU = $U 0.00 0.00
+LDAUJ = 0.00 0.00 0.00
+LDAUPRINT = 2
+!
+
+mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std
+
+#------------------------------------------------------------------------------------------------------
+# 循环结束。
+#------------------------------------------------------------------------------------------------------
+cd ..
+done
 rm -rf /tmp/nodefile.$$ 
 rm -rf /tmp/nodes.$$ 
