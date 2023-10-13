@@ -16,8 +16,23 @@ NP=`cat $PBS_NODEFILE | wc -l`
 NN=`cat $PBS_NODEFILE | sort | uniq | tee /tmp/nodes.$$ | wc -l` 
 cat $PBS_NODEFILE > /tmp/nodefile.$$ 
 
+dos2unix POSCAR
+B=1
+cycle=0
+U2=0
+while [ "$B" -eq 1 ]
+do
 #-------------------------------------------------------------------------------------
-# PART0 生成python脚本
+# 循环开始
+#-------------------------------------------------------------------------------------
+cycle=$((cycle + 1))
+mkidr "$cycle"
+cp POSCAR "$cycle"
+cp POTCAR "$cycle"
+cd "$cycle"||exit
+
+#-------------------------------------------------------------------------------------
+# PART1 生成python脚本
 #-------------------------------------------------------------------------------------
 
 #*******************************
@@ -72,21 +87,8 @@ with open(filename, 'a') as file_object:
     file_object.write(output)
 !
 
-delta_U=5.0
-U_1=0
-cycle=0
-while "$(echo "$delta_U > 0.1"|bc)" -eq 1
-do
 #-------------------------------------------------------------------------------------
-# 循环开始
-#-------------------------------------------------------------------------------------
-cycle=$(cycle + 1)
-mkidr "$cycle"
-cp POSCAR POTCAR "$cycle"
-cd "$cycle"||exit
-U_2=$U_1
-#-------------------------------------------------------------------------------------
-# PART1 生成VASP基本输入文件
+# PART2 生成VASP基本输入文件
 #-------------------------------------------------------------------------------------
 
 #********************************
@@ -144,42 +146,38 @@ POTIM = 0.5
 ISIF = 3
 EDIFFG = -1E-3
 # Surroundings
-PSTRESS = 400
+#PSTRESS = 0
 !
 
 #***************************
 #####-----KPOINTS-----#####
 #***************************
+# 根据经验Ka=Kb=Kc=30~40。
+a1=$(sed -n '3p' POSCAR | gawk '{print $1}' | tr -d $'\r')
+a2=$(sed -n '3p' POSCAR | gawk '{print $2}' | tr -d $'\r')
+a3=$(sed -n '3p' POSCAR | gawk '{print $3}' | tr -d $'\r')
+a=$(echo "sqrt($a1^2 + $a2^2 + $a3^2)" | bc)
+N_1=$(echo "scale = 0; 40 / $a" | bc)
 
+b1=$(sed -n '4p' POSCAR | gawk '{print $1}' | tr -d $'\r')
+b2=$(sed -n '4p' POSCAR | gawk '{print $2}' | tr -d $'\r')
+b3=$(sed -n '4p' POSCAR | gawk '{print $3}' | tr -d $'\r')
+b=$(echo "sqrt($b1^2 + $b2^2 + $b3^2)" | bc)
+N_2=$(echo "scale = 0; 40 / $b" | bc)
+
+c1=$(sed -n '5p' POSCAR | gawk '{print $1}' | tr -d $'\r')
+c2=$(sed -n '5p' POSCAR | gawk '{print $2}' | tr -d $'\r')
+c3=$(sed -n '5p' POSCAR | gawk '{print $3}' | tr -d $'\r')
+c=$(echo "sqrt($c1^2 + $c2^2 + $c3^2)" | bc)
+N_3=$(echo "scale = 0; 40 / $c" | bc)
 cat > KPOINTS <<!
 KPOINTS
  0
 Gamma
-!
-
-# 根据经验Ka=Kb=Kc=30~40。
-a1=$(sed -n '3p' POSCAR | gawk '{print $1}')
-a2=$(sed -n '3p' POSCAR | gawk '{print $2}')
-a3=$(sed -n '3p' POSCAR | gawk '{print $3}')
-a=$(echo "sqrt($a1^2 + $a2^2 + $a3^2)" | bc)
-N_1=$(echo "scale = 0; 40 / $a" | bc)
-
-b1=$(sed -n '4p' POSCAR | gawk '{print $1}')
-b2=$(sed -n '4p' POSCAR | gawk '{print $2}')
-b3=$(sed -n '4p' POSCAR | gawk '{print $3}')
-b=$(echo "sqrt($b1^2 + $b2^2 + $b3^2)" | bc)
-N_2=$(echo "scale = 0; 40 / $b" | bc)
-
-c1=$(sed -n '5p' POSCAR | gawk '{print $1}')
-c2=$(sed -n '5p' POSCAR | gawk '{print $2}')
-c3=$(sed -n '5p' POSCAR | gawk '{print $3}')
-c=$(echo "sqrt($c1^2 + $c2^2 + $c3^2)" | bc)
-N_3=$(echo "scale = 0; 40 / $c" | bc)
-
-cat >> KPOINTS <<!
 $N_1 $N_2 $N_3
 0 0 0
 !
+
 #************************************
 #####-----POSCAR_supercell-----#####
 #************************************
@@ -271,11 +269,15 @@ do
 done
 python Get_Fitted_U.py
 
-U_1=$(grep U Outcome.txt | gawk '{print $2}')
-delta_U=$(echo "$U_1 - $U_2" | bc)
-delta_U=${delta_U#-}
+U1=$(grep U Outcome.txt | gawk '{print $2}' | tr -d $'\r')
+dU=$(echo "$U2 - $U1" | bc)
+dU=${dU#-}
+B=$(echo "$dU > 0.1" | bc)
+U2=$U1
+cp POSCAR POSCAR.linear_response
+
 #-----------------------------------------------------------------------------------------------------
-# PART2 结构优化
+# PART3 结构优化
 #-----------------------------------------------------------------------------------------------------
 
 cp POSCAR_relax POSCAR
@@ -284,19 +286,19 @@ cp INCAR_relax INCAR
 # 使用DFT+U进行结构优化。
 cat >> INCAR <<!
 LDAU = .TRUE.
-LDAUTYPE = 1
-LDAUL = 3 -1 -1
-LDAUU = $U 0.00 0.00
-LDAUJ = 0.00 0.00 0.00
-LDAUPRINT = 2
+LDAUTYPE = 2
+LDAUL = 3 -1
+LDAUU = $U1 0.00
+LDAUJ = 0.00 0.00
 !
 
 mpirun -genv I_MPI_DEVICE ssm -machinefile /tmp/nodefile.$$ -n $NP /opt/issp2/vasp/vasp5.4.4_std
-
+cp CONTCAR ../POSCAR
 #------------------------------------------------------------------------------------------------------
 # 循环结束。
 #------------------------------------------------------------------------------------------------------
 cd ..
 done
+
 rm -rf /tmp/nodefile.$$ 
 rm -rf /tmp/nodes.$$ 
