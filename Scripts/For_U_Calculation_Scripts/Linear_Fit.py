@@ -1,3 +1,4 @@
+# 该脚本用于线性拟合电子占据数和施加的微扰获取U值。
 import pandas as pd
 import numpy as np
 
