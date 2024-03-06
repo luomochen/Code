@@ -7,6 +7,7 @@
 
 import subprocess
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 # 从OUTCAR中读取电子占据数。
@@ -47,10 +48,11 @@ for v in str_V_list:
         charge_scf_list.append('NaN')
         print("The scf calculation in V =" + v + "is unconvergence!")
 
-# 将三个列表合并为一个dataframe，按照微扰大小进行排序。
+# 将三个列表合并n
 filename = "Outcome.txt"
 V_list = [float(v) for v in str_V_list]
-data = np.array(list(zip(V_list, charge_nscf_list, charge_scf_list)))
+#data = np.array(list(zip(V_list, charge_nscf_list, charge_scf_list)))
+data = np.array([V_list, charge_nscf_list, charge_scf_list]).T
 
 # 拟合用函数。
 def func(x, a):
@@ -78,17 +80,31 @@ if r_squared_scf > 0.90 and r_squared_nscf > 0.90:
 else:
     U = "NaN"
 
+# 将数据按照施加微扰的大小排序，格式化输出，绘制图像。
+# 生成y(a * x + b)用于绘制拟合的直线。
+abline_values_nscf = [slope_nscf * i + data[0, 2] for i in V_list]
+abline_values_scf = [slope_scf * i + data[0, 2] for i in V_list]
+# 对data矩阵的列进行排序，排序按照V(eV)的大小。
 data = data[data[:, 0].argsort()]
+# 获取data行数。
 number = np.size(data, 0)
 with open(filename, 'a') as file_object:
     output = "V(eV), N(nscf), N(scf) \n"
     file_object.write(output)
     for i in range(number):
         for j in range(3):
-            output = str(round(data[i, j], 2)) + ", "
+            output = str(round(data[i, j], 3)) + ", "
             file_object.write(output)
         file_object.write("\n")
     output = "U: "+ str(U) + "\n" + "slope_nscf: " + str(round(slope_nscf, 2)) + "\n" + "R^2_nscf: " + str(round(r_squared_nscf, 2)) \
     + "\n" + "slope_scf: " + str(round(slope_scf, 2)) + "\n" + "R^2_scf: " + str(round(r_squared_scf, 2))
     file_object.write(output)
 print(output)
+plt.title("Linear response")
+plt.scatter(V_list, charge_nscf_list, c="blue")
+l1, = plt.plot(V_list, abline_values_nscf, c="blue")
+plt.scatter(V_list, charge_scf_list, c="red")
+l2, = plt.plot(V_list, abline_values_scf, c="red")
+plt.legend(handles=[l1, l2],labels=['nscf', 'scf'])
+plt.savefig("Outcome.png")
+plt.show()
