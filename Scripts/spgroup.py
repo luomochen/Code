@@ -29,21 +29,14 @@ files = os.listdir()
 opjud = []
 
 for file in files:
-    if re.search(r"POSCAR", file):
-        atoms = vasp.read_vasp(file)
-        sg = spacegroup.get_spacegroup(atoms=atoms, symprec=prec)
-        print(f"{file}: {sg.symbol}, No. {sg.no}")
-        opjud.append(True)
-    elif re.search(r"CONTCAR", file):
-        atoms = vasp.read_vasp(file)
-        sg = spacegroup.get_spacegroup(atoms=atoms, symprec=prec)
-        print(f"{file}: {sg.symbol}, No. {sg.no}")
-        opjud.append(True)
-    elif re.search(r".vasp", file):
-        atoms = vasp.read_vasp(file)
-        sg = spacegroup.get_spacegroup(atoms=atoms, symprec=prec)
-        print(f"{file}: {sg.symbol}, No. {sg.no}")
-        opjud.append(True)
+    if re.search(r"POSCAR", file) or re.search(r"CONTCAR", file) or re.search(r".vasp", file):
+        try:
+            atoms = vasp.read_vasp(file)
+            sg = spacegroup.get_spacegroup(atoms=atoms, symprec=prec)
+            print(f"{file}: {sg.symbol}, No. {sg.no}")
+            opjud.append(True)
+        except IndexError:
+            print(f"{file} format error!")
     else:
         opjud.append(False)
 
