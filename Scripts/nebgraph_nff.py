@@ -3,8 +3,7 @@
 #--------------------------------------------------------
 # This scripts is used to plot the free energy difference
 # and generate a new flod to store the saddle point for
-# frequency calculation. It can be also used to merge the
-# path. 
+# frequency calculation.
 #--------------------------------------------------------
 import os
 import re
@@ -27,64 +26,29 @@ def image_distance(position1, position2):
     differences = np.linalg.norm(position1-position2)
     return differences
 
-print("--------------------------------------------------------------------------------")
-paths = list(input(
-    "If multiple diffusion paths need to be merged, specify their numbers: ").split(" "))
-print("--------------------------------------------------------------------------------")
-
 # List all the files in the directory.
 # Use the regular expersion to match the filename
 # and find the image created in the path.
 free_energy_list = []
 dist_list = []
-if paths == [""]:
-    files = os.listdir()
-    image_number = 0
-    for file in files:
-        if re.match(r"0\d", file):
-            image_number = image_number + 1
+files = os.listdir()
+image_number = 0
+for file in files:
+    if re.match(r"0\d", file):
+        image_number = image_number + 1
 
-    for i in range(image_number):
-        # Use ase to read the OUTCAR.
-        image = vasp.read_vasp_out("0" + str(i) + "/OUTCAR")
-        free_energy = image.get_total_energy()
-        carts = image.get_positions()
-        if i == 0:
-            dist = 0
-        else:
-            dist = image_distance(carts, cartsp)
-        cartsp = carts
-        free_energy_list.append(free_energy)
-        dist_list.append(dist)
-else:
-    for path in paths:
-        path_free_energy_list = []
-        path_dist_list = []
-        files = os.listdir("path"+path)
-        image_number = 0
-        for file in files:
-            if re.match(r"0\d", file):
-                image_number = image_number + 1
-
-        for i in range(image_number):
-            # Use ase to read the OUTCAR.
-            image = vasp.read_vasp_out("path"+path+ "/0" + str(i) + "/OUTCAR")
-            free_energy = image.get_total_energy()
-            carts = image.get_positions()
-            if i == 0:
-                dist = 0
-            else:
-                dist = image_distance(carts, cartsp)
-            cartsp = carts
-            path_free_energy_list.append(free_energy)
-            path_dist_list.append(dist)
-        
-        if re.search(r".1", path) == None:
-            path_free_energy_list.pop(0)
-            path_dist_list.pop(0)
-        
-        free_energy_list.extend(path_free_energy_list)
-        dist_list.extend(path_dist_list)
+for i in range(image_number):
+    # Use ase to read the OUTCAR.
+    image = vasp.read_vasp_out("0" + str(i) + "/OUTCAR")
+    free_energy = image.get_total_energy()
+    carts = image.get_positions()
+    if i == 0:
+        dist = 0
+    else:
+        dist = image_distance(carts, cartsp)
+    cartsp = carts
+    free_energy_list.append(free_energy)
+    dist_list.append(dist)
 # Compare the initial state and final state 
 # to find the lower one as the energy baseline.
 if free_energy_list[0] > free_energy_list[-1]:
