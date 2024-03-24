@@ -13,7 +13,7 @@ from ase.io import vasp
 from scipy import interpolate
 from matplotlib import pyplot as plt
 
-def image_distance(position1, position2):
+def image_distance(directs1, directs2, latt_vec_matrix):
     """ Calculate the distance between each image.
         The distance was defined as $\sum_{i=1}^n(x^\prime_n-x_n)$.
     Args:
@@ -23,7 +23,15 @@ def image_distance(position1, position2):
     Returns:
         float: distance.
     """
-    differences = np.linalg.norm(position1-position2)
+    delta_dirs = directs1 - directs2
+    size = delta_dirs.shape
+    for i in range(size[0]):
+        for j in range(size[1]):
+            if delta_dirs[i, j] <= -0.5:
+                delta_dirs[i, j] += 1.0
+            elif delta_dirs[i, j] > 0.5:
+                delta_dirs[i, j] -= 1.0
+    differences = np.linalg.norm(delta_dirs@latt_vec_matrix)
     return differences
 
 # List all the files in the directory.
@@ -40,13 +48,17 @@ for file in files:
 for i in range(image_number):
     # Use ase to read the OUTCAR.
     image = vasp.read_vasp_out("0" + str(i) + "/OUTCAR")
+    latt_vec_matrix = image.cell
     free_energy = image.get_total_energy()
-    carts = image.get_positions()
+    directs = image.get_scaled_positions()
     if i == 0:
         dist = 0
+        latt_vec_matrix_p = latt_vec_matrix
     else:
-        dist = image_distance(carts, cartsp)
-    cartsp = carts
+        dist = image_distance(directs, directsp, latt_vec_matrix_p)
+        if np.linalg.norm(latt_vec_matrix_p-latt_vec_matrix) > 1E-6:
+            print(f"Image{i} lattice vector matrix is changed!!!")
+    directsp = directs
     free_energy_list.append(free_energy)
     dist_list.append(dist)
 # Compare the initial state and final state 
