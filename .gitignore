@@ -2,3 +2,7 @@ test
 *.exe
 *.vscode
 *.csv
+*.log
+*.traj
+*.vasp
+*POSCAR*
