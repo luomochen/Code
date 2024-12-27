@@ -3,7 +3,7 @@
 # Use vaspkit to generate processed data of dos.
 #-----------------------------------------------
 ELEMENTS='Zr O'
-ORBITALS=('s' 'py pz px')
+ORBITALS=('s' 'py pz px' 'dxy dyz dz2 dxz dx2-y2')
 for E in $ELEMENTS
 do
     for O in "${ORBITALS[@]}"; do
@@ -15,3 +15,5 @@ do
         fi
     done 
 done
+echo 111 | vaspkit > /dev/null
+echo TDOS.dat\&ITDOS.dat is generated.
