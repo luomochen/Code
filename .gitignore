@@ -1,4 +1,8 @@
 test
+vasp_src
+__pycache__
+.gitignore
+*.ipynb
 *.exe
 *.vscode
 *.csv
