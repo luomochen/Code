@@ -3,52 +3,62 @@
 #---------------------------------------------
 # A script for ploting the fat band structure.
 #---------------------------------------------
+import re
 import math
 import numpy as np
+from subprocess import getstatusoutput
 from doped import analysis
 from pymatgen.io.vasp import Vasprun
 from matplotlib import pyplot as plt
 
-def charge_correction(filepath, stastic_dielec):
-    defect_entry = analysis.defect_entry_from_paths(defect_path=filepath, 
+def get_free_energy(OUTCAR_file_path):
+    """Get free energy from the defect syetem.
+    """
+    input = "gawk '/TOTEN/' " + OUTCAR_file_path
+    get_free_energy = getstatusoutput(input)
+    if get_free_energy[0] == 0:
+        free_energy_list = re.findall(r"=(.+?)eV", get_free_energy[1])
+        try:
+            free_energy_list = [float(free_energy.strip()) 
+                                for free_energy in free_energy_list]
+        except ValueError:
+            free_energy_list = ['NaN']
+        return free_energy_list
+    else:
+        return ['NaN']
+
+def charge_correction(defect_file_path, stastic_dielec, chemical_potential, defect_charge_state):
+    """Get energy correction using eFNV method.
+    """
+    defect_entry = analysis.defect_entry_from_paths(defect_path=defect_file_path,
+                                                    charge_state=defect_charge_state, 
                                                     bulk_path="pft", 
                                                     dielectric=stastic_dielec)
     print(f"Charge: {defect_entry.charge_state} at site: {defect_entry.defect_supercell_site.frac_coords}")
     correction, error = defect_entry.get_kumagai_correction(return_correction_error=True)
     print(f"error range: {error}")
     correction = defect_entry.corrections['kumagai_charge_correction']
-    return correction, error
+    defect_free_energy = get_free_energy(defect_file_path)
+    pft_free_energy = get_free_energy("pft")
+    intercept = defect_free_energy - pft_free_energy + chemical_potential + correction
+    return intercept, [correction, error]
 
-def defect_data_porcess(stastic_dielec, band_structure, enthalpy_list):
-    correction_Hip, error_Hip = charge_correction('Hi+', stastic_dielec)
-    intercept_Hip = enthalpy_list[0] - enthalpy_list[3] - enthalpy_list[4] + band_structure[0] + correction_Hip
-    correction_Him, error_Him = charge_correction('Hi-', stastic_dielec)
-    intercept_Him = enthalpy_list[1] - enthalpy_list[3] - enthalpy_list[4] - band_structure[0] + correction_Him
-    intercept_Hin = enthalpy_list[2] - enthalpy_list[3] - enthalpy_list[4]
-    Formation_Enthalpy_Hi = intercept_Hin
-    pm_level = (intercept_Him - intercept_Hip) / 2
-    pn_level = Formation_Enthalpy_Hi - intercept_Hip
-    nm_level = -Formation_Enthalpy_Hi + intercept_Him
-    pm_Formation_enthalpy = pm_level + intercept_Hip
-    U = 2 * (pm_Formation_enthalpy - Formation_Enthalpy_Hi)
-    processed_data = [intercept_Hip, intercept_Him, intercept_Hin, pm_level, pn_level, nm_level, U]
-    output = f"Formation Enthalpy of Hi+: E_f + {intercept_Hip}\
-        \nFormation Enthalpy of Hi-: -E_f + {intercept_Him}\
-        \nFormation Enthalpy of Hi: {Formation_Enthalpy_Hi}\
-        \n+/- CTL Fermi level: {pm_level}\
-        \n+/0 CTL Fermi level: {pn_level}\
-        \n0/- CTL Fermi level: {nm_level}\
-        \nCTL Formation enthalpy: {pm_Formation_enthalpy}\
-        \nU: {U}"
-    print(output)
-    with open('defect.dat', 'w') as file:
-        file.write(output)
-    return processed_data
+def transition_level(charge_state_1, charge_state_2, intercept_1, intercept_2):
+    trans_level = (intercept_1 - intercept_2) / (charge_state_2 - charge_state_1)
+    trans_energy = trans_level * charge_state_1 + intercept_1
+    return trans_level, trans_energy
+
+def piecewise_function(defect_founction_list):
+    transition_data_list = []
+    for defect in pairs:
+        trans_level, trans_energy = transition_level(pair[0][0], pair[0][1], pair[1][0], pair[1][1])
+        transition_data_list.append([trans_level, trans_energy])
+    
 
 def plot_formation_enthalpy_fermi_level_diagram(defect_data, band_structure):
-    level_span = max(defect_data[3:6])+0.5
+    level_span = band_structure[2]+0.5
     enthalpy_span = np.linspace(defect_data[0]-0.5, defect_data[1]+0.5, 120)
-    E_fermi = np.arange(0, level_span+0.5, 0.1)
+    E_fermi = np.arange(0, band_structure[2]+0.5, 0.1)
     E_formation_Hip = E_fermi + defect_data[0]
     E_formation_Him = -E_fermi + defect_data[1]
     E_formation_Hin = 0 * E_fermi + defect_data[2]

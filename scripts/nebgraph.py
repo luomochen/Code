@@ -10,13 +10,16 @@ import os
 import re
 import numpy as np
 import pandas as pd
+from subprocess import getstatusoutput
 from ase.io import vasp
 from scipy import interpolate
+from scipy.constants import physical_constants
 from matplotlib import pyplot as plt
 
 def image_distance(directs1, directs2, latt_vec_matrix):
     """ Calculate the distance between each image using pbc.
         The distance was defined as $\sum_{i=1}^n(x^\prime_n-x_n)$.
+    
     Args:
         position1 (list[list[]]): high dimension coordiante of image 1.
         position2 (_type_): high dimension coordiante of image 2.
@@ -35,17 +38,12 @@ def image_distance(directs1, directs2, latt_vec_matrix):
     differences = np.linalg.norm(delta_dirs@latt_vec_matrix)
     return differences
 
-print("--------------------------------------------------------------------------------")
-paths = list(input(
-    "If multiple diffusion paths need to be merged, specify their numbers: ").split(" "))
-print("--------------------------------------------------------------------------------")
-
-# List all the files in the directory.
-# Use the regular expersion to match the filename
-# and find the image created in the path.
-free_energy_list = []
-dist_list = []
-if paths == [""]:
+def neb_data_process():
+    # List all the files in the directory.
+    # Use the regular expersion to match the filename
+    # and find the image created in the path.
+    free_energy_list = []
+    dist_list = []
     files = os.listdir()
     image_number = 0
     for file in files:
@@ -68,72 +66,69 @@ if paths == [""]:
         directsp = directs
         free_energy_list.append(free_energy)
         dist_list.append(dist)
-else:
-    for path in paths:
-        path_free_energy_list = []
-        path_dist_list = []
-        files = os.listdir("path"+path)
-        image_number = 0
-        for file in files:
-            if re.match(r"0\d", file):
-                image_number = image_number + 1
-
-        for i in range(image_number):
-            # Use ase to read the OUTCAR.
-            image = vasp.read_vasp_out("path"+path+ "/0" + str(i) + "/OUTCAR")
-            latt_vec_matrix = image.cell
-            free_energy = image.get_total_energy()
-            directs = image.get_scaled_positions()
-            if i == 0:
-                dist = 0
-                latt_vec_matrix_p = latt_vec_matrix
-            else:
-                dist = image_distance(directs, directsp, latt_vec_matrix_p)
-                if np.linalg.norm(latt_vec_matrix_p-latt_vec_matrix) > 1E-6:
-                    print(f"Image{i} lattice vector matrix is changed!!!")
-            directsp = directs
-            path_free_energy_list.append(free_energy)
-            path_dist_list.append(dist)
-        
-        if re.search(r".1", path) == None:
-            path_free_energy_list.pop(0)
-            path_dist_list.pop(0)
-        
-        free_energy_list.extend(path_free_energy_list)
-        dist_list.extend(path_dist_list)
-# Compare the initial state and final state 
-# to find the lower one as the energy baseline.
-if free_energy_list[0] > free_energy_list[-1]:
-    free_energy_diff_list = [free_energy - free_energy_list[-1] 
-                             for free_energy in free_energy_list]
-else:
-    free_energy_diff_list = [free_energy - free_energy_list[0] 
-                             for free_energy in free_energy_list]
-# When calculating reaction coordinates, 
-# you need to calculate the distance 
-# between the previous image and the next image.
-# and then add them together.
-for i in range(len(dist_list)):
-    if i == 0:
-        dist_list[i] = dist_list[i]
+        # Compare the initial state and final state 
+        # to find the lower one as the energy baseline.
+    if free_energy_list[0] > free_energy_list[-1]:
+        free_energy_diff_list = [free_energy - free_energy_list[-1] 
+                                for free_energy in free_energy_list]
     else:
-        dist_list[i] = dist_list[i] + dist_list[i-1]   
-data = pd.DataFrame({"Reaction coordinate": dist_list, 
-                     "Energy difference": free_energy_diff_list})
-data.to_csv("neboutcome.csv", index=False)
-print(data)
+        free_energy_diff_list = [free_energy - free_energy_list[0] 
+                                for free_energy in free_energy_list]
+    # When calculating reaction coordinates, 
+    # you need to calculate the distance 
+    # between the previous image and the next image.
+    # and then add them together.
+    for i in range(len(dist_list)):
+        if i == 0:
+            dist_list[i] = dist_list[i]
+        else:
+            dist_list[i] = dist_list[i] + dist_list[i-1]   
+    data = pd.DataFrame({"Reaction coordinate": dist_list, 
+                        "Energy difference": free_energy_diff_list})
+    data.to_csv("neboutcome.csv", index=False)
+    print(data)
+    return dist_list, free_energy_diff_list
 
-# Interpolate to get smooth curve.
-model = interpolate.interp1d(
-    dist_list, free_energy_diff_list, kind="quadratic")
-xs = np.linspace(0, dist_list[-1], 500)
-ys = model(xs)
+def creat_saddle_point(free_energy_diff_list):
+    """Determine the saddle point file for further calculation.
+    """
+    barrier = max(free_energy_diff_list)
+    saddle_point = free_energy_diff_list.index(barrier)
+    os.makedirs('saddle', exist_ok=True)
+    status, output = getstatusoutput("cp 0"+str(saddle_point)+"/CONTCAR saddle/POSCAR")
+    if status == 0:
+        print(f'\nSaddle point is in image {saddle_point}.')
+        print(f'The energy barrier is {round(barrier, 3)} eV.')
+        print('Saddle file is generated!')
 
-# Plot the free energy - reaction coordianate diagram.
-plt.xlabel("Reaction coordiante ($\AA$)")
-plt.ylabel("Energy difference (eV)")
-plt.grid(axis="y")
-plt.scatter(dist_list, free_energy_diff_list, c="red")
-plt.plot(xs, ys, c="black")
-plt.savefig("neboutcome.png")
-plt.show()
+def plot_reaction_path_graph(dist_list, free_energy_diff_list):
+    """Plot the barrier-reaction cooridinate graph.
+    """
+    # Interpolate to get smooth curve.
+    model = interpolate.interp1d(dist_list, 
+                                 free_energy_diff_list, 
+                                 kind="quadratic")
+    xs = np.linspace(0, dist_list[-1], 500)
+    ys = model(xs)
+    # Plot the free energy - reaction coordianate diagram.
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=150)
+    max_value_index = free_energy_diff_list.index(max(free_energy_diff_list))
+    ax.set_title(f"Barrier = {round(free_energy_diff_list[max_value_index], 3)} eV", 
+                 fontsize=25, color='black')
+    ax.set_xlabel(r"Reaction coordiante ($\mathrm{\AA}$)", fontsize=20)
+    ax.set_ylabel(r"$\mathrm{\Delta}$H (eV)", fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.scatter(dist_list, free_energy_diff_list, edgecolors='red', 
+               facecolors='white', s=400, linewidths=3, zorder=2)
+    ax.plot(xs, ys, c="black", linewidth=3, zorder=1)
+    ax.grid(True)
+    fig.savefig("neboutcome.png")
+    plt.show()
+    
+def main():
+    dist_list, free_energy_diff_list = neb_data_process()
+    creat_saddle_point(free_energy_diff_list)
+    plot_reaction_path_graph(dist_list, free_energy_diff_list)
+
+if __name__ == "__main__":
+    main()

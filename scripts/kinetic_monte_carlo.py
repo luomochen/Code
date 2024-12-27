@@ -7,6 +7,7 @@
 # 要求进行调整.
 #-----------------------------------------
 import copy
+import math
 import time
 import numpy as np
 import pandas as pd
@@ -30,7 +31,7 @@ def gen_events(select_path, output):
     的所有可跳位点. 注意, 这些位点都是对称操作下等价的! 使用周期性边界条件.
     """
     # 需要读取含有所有等价位点的超胞。
-    sites = vasp.read_vasp("./sites.vasp")
+    sites = vasp.read_vasp("./Hi-_sup.vasp")
     site_number = sum(sites.numbers)
     # events的存储格式。[[],[],[]]，第一列是当前位点，后面的n列可跳位点。n列之后是
     # 对应的跳跃次数。为了保证能够使用numba加速，使用ndarray格式。
@@ -70,16 +71,13 @@ def rate(T, barriers, jumpfreqs):
         rate = np.float64(jumpfreqs[i] * np.exp(-barriers[i]*(beta)))
         rates.append(rate)
         total_rate = np.float64(total_rate + rate)
-    name = ['rate', 'possibility']
-    rate_data = pd.DataFrame(columns=name, data=[rates, rates/total_rate])
-    rate_data.to_csv(str(T)+'_rate.csv', index=False)
     return total_rate, np.array(rates)
 
-def cal_displacement(events, events_num):
+def cal_diffusivity(events, events_num, t):
     """
     后处理步骤, 计算累计位移, 方均根位移和扩散系数.
     """
-    sites = vasp.read_vasp("./sites.vasp")
+    sites = vasp.read_vasp("./Hi-_sup.vasp")
     displacement = np.zeros(3)
     for event in events:
         for i in range(events_num):
@@ -87,7 +85,13 @@ def cal_displacement(events, events_num):
             distance = sites.get_distance(event[0],event[i+1],mic=True,vector=True)
             distance = distance*event[i+1+events_num]
             displacement = displacement + distance
-    return displacement
+    # 三维扩散, 计算三个方向上的扩散系数再取平均.
+    x_square = np.float64(math.pow(displacement[0], 2) * math.pow(10, -20))
+    y_square = np.float64(math.pow(displacement[1], 2) * math.pow(10, -20))
+    z_square = np.float64(math.pow(displacement[2], 2) * math.pow(10, -20))
+    diff_xyz = np.array([x_square, y_square, z_square])/(2*t)
+    diff = np.sum(diff_xyz)/3
+    return diff, diff_xyz, displacement
 
 @njit
 # 和kmc相关的代码使用机器码.
@@ -135,20 +139,22 @@ def kmc_iteration(t_control, nsteps, events, events_num, ini, total_rate, rates)
         i = i + 1
         if t > t_control:
             break
-    return t, i, events
+    return t, events, i
 
-def kmc_loop(result_queue, t_control, nsteps, events, events_num, ini, total_rate, rates) -> None:
+def kmc_loop(result_queue, t_control, nsteps, events, events_num, ini, total_rate, rates):
     """
     为了避免numba和多线程冲突, 再定义一个函数将kmc主循环包装起来. 先编译kmc_loop再
     将结果传递给队列.
     """
-    t, i, events= kmc_iteration(t_control, nsteps, events, events_num, ini, total_rate, rates)
-    result_queue.put([t, i, events])
+    t, events, i= kmc_iteration(t_control, nsteps, events, events_num, ini, total_rate, rates)
+    result_queue.put([t, events, i])
 
-def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin, events_num, barriers, jumpfreqs) -> None:
+def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin, events_num, barriers, jumpfreqs):
     # 计算运行时间.
     start=time.time()
     # 初始化输入.
+    t_list = []
+    diff_list = []
     step_outcome = []
     barriers_ex = list_extend(barriers, repeating_number)
     jumpfreqs_ex = list_extend(jumpfreqs, repeating_number)
@@ -175,31 +181,45 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
             break
         results.append(result)
     for result in results:
-        displacement = cal_displacement(result[2], events_num)
-        step_outcome.append([result[0], result[1], displacement[0], displacement[1], displacement[2]])
+        diff, diff_xyz, displacement = cal_diffusivity(result[1], events_num, result[0])
+        t_list.append(result[0])
+        diff_list.append(diff)
+        step_outcome.append([result[0], diff,
+                             diff_xyz[0], diff_xyz[1], diff_xyz[2], 
+                             displacement[0], displacement[1], displacement[2],
+                             result[2]])
+
+    diff_mean = np.average(np.array(diff_list), weights=np.array(t_list))
+    diff_std = np.std(np.array(diff_list))
     end = time.time()
-    print(f"{T} K finished, spend time: {round(end-start, 5)} s.")
-    name = ['t', 'steps', 'd_x', 'd_y', 'd_z']
+    print(f"{T}: mean diffusivity: {diff_mean}, SD: {diff_std}, spend time: {end-start} s.")
+    name = ['t', 'D', 'D_x', 'D_y', 'D_z', 'd_x', 'd_y', 'd_z', 'steps']
     outcome = pd.DataFrame(columns=name, data=step_outcome)
     outcome.to_csv(str(T)+'.csv', index=False)
+    return [T, diff_mean, diff_std]
 
 def main():
     # 输入数据.
     T_list = [300, 500, 700, 1000, 1500, 2000, 2500, 3000]
-    repeat_run = int(1000)
-    t_control_list = np.ones(8)*1E8
-    #t_control_list = np.float64([2.3E6, 8.7, 4E-2, 7E-4, 3E-5, 6.2E-6, 2.3E-6, 1.2E-6])
+    repeat_run = int(20000)
+    #t_control_list = np.ones(8)*1E8
+    t_control_list = np.float64([3.654, 8.89E-3, 6.74E-4, 9.74E-5, 2.165E-5, 1.019E-5, 6.492E-6, 4.781E-6])
     nsteps = int(1E7)
-    select_path = [3.10266]
-    barriers = [0.389]
-    jumpfreqs = np.float64([4.67931])*1E12
+    select_path = [3.10144, 3.10266, 3.16324]
+    barriers = [2.61355, 0.38895, 2.62301]
+    jumpfreqs = np.float64([74.932E12, 4.67931E12, 74.22347E12])
     # 初始化事件.
     repeating_number, events_origin = gen_events(select_path, True)
     events_num = sum(repeating_number)
     # 预先调用kmc_iteration保证numba提前对kmc和kmc_iteration编译, 确保不和多线程产生冲突.
     _ = kmc_iteration(1, 1, np.array([[0, 1, 0],[1, 0, 0]]), 1, 0, 1E12, [1E12])
+    diff_list = []
     for i in range(len(T_list)):
-        main_loop(t_control_list[i], nsteps, repeat_run, T_list[i], repeating_number, events_origin, events_num, barriers, jumpfreqs)
+        outcome = main_loop(t_control_list[i], nsteps, repeat_run, T_list[i], repeating_number, events_origin, events_num, barriers, jumpfreqs)
+        diff_list.append(outcome)
+    name = ['T', 'mean diffusivity', 'SD']
+    outcome = pd.DataFrame(columns=name, data=diff_list)
+    outcome.to_csv('outcome.csv', index=False)
 
 if __name__ == "__main__":
     main()
