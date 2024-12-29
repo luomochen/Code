@@ -8,7 +8,7 @@ import matplotlib.animation as animation
 fig,(ax1,ax2)=plt.subplots(1,2,figsize=(10,5))
 plt.ion()
 
-na =int(raw_input("number of particles? "))
+na =int(input("number of particles? "))
 k=0.5 #eV/(A*A)
 amax=2
 m=np.array([[ 1 + 0.0*random.random()] for i in range(na)])

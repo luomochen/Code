@@ -25,7 +25,7 @@ for i in range (100000):
         nin=nin+1
     lab='value of $\pi$= {:6.3f} steps {:8d}'.format(float(4*nin)/(nin+nout), i)
     if np.mod(i,4000)==0:
-        print i
+        print(i)
         ax1.set_title('value of $\pi$',size=30)
         ax1.set_aspect(1)
         ax1.axes.set_xlim([0,1])
