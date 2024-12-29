@@ -8,7 +8,8 @@ import matplotlib.animation as animation
 fig,(ax1,ax2)=plt.subplots(1,2,figsize=(10,5))
 plt.ion()
 
-na =int(input("number of particles? "))
+#na =int(raw_input("number of particles? "))
+na = 1
 k=0.5 #eV/(A*A)
 amax=2
 m=np.array([[ 1 + 0.0*random.random()] for i in range(na)])
@@ -50,7 +51,7 @@ for i in range(100):
     plt.pause(0.1)
 #    ax1.clear()
 #    ax2.clear()
-print(frames)
+#print(frames)
 im_ani = animation.ArtistAnimation(fig, frames, interval=50, repeat_delay=3000,
                                    blit=True)
 mfile = "ensamble.mp4"
