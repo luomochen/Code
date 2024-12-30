@@ -18,6 +18,8 @@ from numba import njit
 from scipy.constants import physical_constants
 from ase.io import vasp 
 
+import input
+
 def list_extend(list, repeating_num):
     """
     存在部分等价的扩散路径, 需要对应的扩散势垒, 跳动几率等列表扩充.
@@ -209,14 +211,8 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
 
 def main():
     # 输入数据.
-    T_list = [300, 500, 700, 1000, 1500, 2000, 2500, 3000]
-    repeat_run = int(100)
     t_control_list = np.ones(8)*1E8
-    #t_control_list = np.float64([2.3E6, 8.7, 4E-2, 7E-4, 3E-5, 6.2E-6, 2.3E-6, 1.2E-6])
-    nsteps = int(1E7)
-    select_path = [0.43681, 2.69796, 2.75839, 2.80898, 3.93689, 3.96580]
-    barriers = [0.007, 0.793, 1.866, 0.812, 0.819, 1.087]
-    jumpfreqs = np.float64([2333.96479, 8.72805, 16.90526, 12.18344, 13.75844, 9.02276])*1E12
+    repeat_run, nsteps, T_list, barriers, jumpfreqs, select_path = input.read_input()
     # 初始化事件.
     repeating_number, events_origin = gen_events(select_path, True)
     events_num = sum(repeating_number)
