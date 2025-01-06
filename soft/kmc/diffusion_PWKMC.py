@@ -77,7 +77,7 @@ def rate(T, barriers, jumpfreqs, pw=False):
         total_rate = np.float64(total_rate + rate)
     # pw控制是否开启可能性加权动力学蒙特卡洛方法.
     if pw == True:
-        weighted_factors = weighted_sampling(rates, total_rate)
+        weighted_factors = weighted_sampling(rates, total_rate, pro_control=1)
         rates = rates / weighted_factors
         total_rate = np.sum(rates)
     else:
@@ -87,17 +87,21 @@ def rate(T, barriers, jumpfreqs, pw=False):
     rate_data.to_csv(str(T)+'_rate.csv', index=False)
     return total_rate, np.array(rates)
 
-def weighted_sampling(rates, total_rate, mode=False, *pro_control):
-    if mode == False:
-        pro_control = 1./float(len(rates))
+def weighted_sampling(rates, total_rate, pro_control):
     probilities = rates / total_rate
     weighted_factors = np.ones(len(probilities))
-    # 查找列表中所有大于1/n的事件.
-    indices = [index for index, prob in enumerate(probilities) if prob > pro_control]
-    # 让这些事件发生的概率降低到和所有低概率事件发生的可能性之和相等的程度.
-    remaining_prob_sum = sum(prob for prob in probilities if prob <= pro_control)
+    # 将列表中重复值用set方法去除，并按照从大到小排序。获得第pro_control个最大值。
+    sorted_probilities = sorted(set(probilities), reverse=True)
+    bigger_probilities = sorted_probilities[pro_control]
+    # 计算小于第pro_control个最大值的概率之和。
+    sum_prob = 0
+    for prob in probilities:
+        if prob < bigger_probilities:
+            sum_prob += prob
+    # 确定大于等于第pro_control个最大值的概率的索引。
+    indices = [index for index, prob in enumerate(probilities) if prob >= bigger_probilities]
     for index in indices:
-        factor = round(probilities[index] / remaining_prob_sum)
+        factor = round(probilities[index] / sum_prob)
         weighted_factors[index] = weighted_factors[index]*factor
     return weighted_factors
 
@@ -172,6 +176,7 @@ def kmc_loop(result_queue, t_control, nsteps, events, events_num, ini, total_rat
     result_queue.put([t, i, events])
 
 def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin, events_num, barriers, jumpfreqs) -> None:
+    print(f"Start {T} K main loop.")
     # 计算运行时间.
     start=time.time()
     # 初始化输入.
@@ -211,8 +216,8 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
 
 def main():
     # 输入数据.
-    t_control_list = np.ones(8)*1E8
     repeat_run, nsteps, T_list, barriers, jumpfreqs, select_path = input.read_input()
+    t_control_list = np.ones(len(T_list))*1E8
     # 初始化事件.
     repeating_number, events_origin = gen_events(select_path, True)
     events_num = sum(repeating_number)
