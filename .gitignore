@@ -2,7 +2,6 @@ test
 vasp_src
 __pycache__
 .vscode
-*.ipynb
 *.out
 *.exe
 *.csv
@@ -16,3 +15,4 @@ __pycache__
 *POTCAR*
 *INCAR*
 *KPOINTS*
+*test*
