@@ -29,40 +29,49 @@ def list_extend(list, repeating_num):
         list_ex.extend(repeating_num[i]*[list[i]])
     return list_ex
 
-def gen_events(select_path, output):
+def gen_events(select_path, mode):
     """
     生成存储所有事件的列表, 即一个位点下次跳跃发生时的可跳位置. 找到超胞中所有位点
     的所有可跳位点. 注意, 这些位点都是对称操作下等价的! 使用周期性边界条件.
     """
-    # 需要读取含有所有等价位点的超胞。
-    sites = vasp.read_vasp("./sites.vasp")
-    site_number = sum(sites.numbers)
-    # events的存储格式。[[],[],[]]，第一列是当前位点，后面的n列可跳位点。n列之后是
-    # 对应的跳跃次数。为了保证能够使用numba加速，使用ndarray格式。
-    events = []
-    for i in range(site_number):
-        event = [i]
-        repeating_num = []
-        for path in select_path:
-            num = 0
-            for j in range(site_number):
-                dist = sites.get_distance(i, j, mic=True)
-                # 判定等价路径的条件, 距离相等.         
-                if abs(path - dist) < 1E-3:
-                    event.append(j)
-                    num = num + 1
-            repeating_num.append(num)
-        path_num = sum(repeating_num)                
-        event.extend([0]*path_num)
-        events.append(event)
+    if mode == True:
+        # 需要读取含有所有等价位点的超胞。
+        sites = vasp.read_vasp("./sites.vasp")
+        site_number = sum(sites.numbers)
+        # events的存储格式。[[],[],[]]，第一列是当前位点，后面的n列可跳位点。n列之后是
+        # 对应的跳跃次数。为了保证能够使用numba加速，使用ndarray格式。
+        events = []
+        for i in range(site_number):
+            event = [i]
+            repeating_num = []
+            for path in select_path:
+                num = 0
+                for j in range(site_number):
+                    dist = sites.get_distance(i, j, mic=True)
+                    # 判定等价路径的条件, 距离相等.         
+                    if abs(path - dist) < 5E-4:
+                        event.append(j)
+                        num = num + 1
+                repeating_num.append(num)
+            path_num = sum(repeating_num)                
+            event.extend([0]*path_num)
+            events.append(event)
     # 将得到的所有event输出为csv文件, 便于检查.
-    if output == True:
+        repeating_num_data = pd.DataFrame(repeating_num)
+        repeating_num_data.to_csv("./repeating_num.csv", index=False)
         events_data = pd.DataFrame(events)
         events_data.to_csv("./events.csv", index=False)
+    elif mode == 'read':
+        repeating_num_data = pd.read_csv("./repeating_num.csv")
+        repeating_num = repeating_num_data.values.flatten().tolist()
+        repeating_num = [int(value) for value in repeating_num]
+        events_data = pd.read_csv("./events.csv")
+        events = events_data.values.tolist()
+        events = [[int(value) for value in row] for row in events]
     # 转换为ndarray格式。
     return repeating_num, np.array(events)
 
-def rate(T, barriers, jumpfreqs, pw=False):
+def rate(T, barriers, jumpfreqs, pw, control_step):
     """
     根据DFT结果和Arrhenius公式计算指定温度下的反应速率和速率之和.
     使用float128保存数据.
@@ -77,28 +86,28 @@ def rate(T, barriers, jumpfreqs, pw=False):
         total_rate = np.float64(total_rate + rate)
     # pw控制是否开启可能性加权动力学蒙特卡洛方法.
     if pw == True:
-        weighted_factors = weighted_sampling(rates, total_rate, pro_control=1)
+        weighted_factors = weighted_sampling(rates, total_rate, control_step)
         rates = rates / weighted_factors
         total_rate = np.sum(rates)
-    else:
+    elif pw == False:
         weighted_factors = np.ones(len(rates))
     name = ['rate', 'possibility', 'weighted_factors']
     rate_data = pd.DataFrame(columns=name, data=np.array([rates, np.float128(rates/total_rate), weighted_factors]).T)
     rate_data.to_csv(str(T)+'_rate.csv', index=False)
     return total_rate, np.array(rates)
 
-def weighted_sampling(rates, total_rate, pro_control):
+def weighted_sampling(rates, total_rate, control_step):
     probilities = rates / total_rate
     weighted_factors = np.ones(len(probilities))
-    # 将列表中重复值用set方法去除，并按照从大到小排序。获得第pro_control个最大值。
+    # 将列表中重复值用set方法去除，并按照从大到小排序。获得第control_step个最大值。
     sorted_probilities = sorted(set(probilities), reverse=True)
-    bigger_probilities = sorted_probilities[pro_control]
-    # 计算小于第pro_control个最大值的概率之和。
+    bigger_probilities = sorted_probilities[control_step]
+    # 计算小于第control_step个最大值的概率之和。
     sum_prob = 0
     for prob in probilities:
         if prob < bigger_probilities:
             sum_prob += prob
-    # 确定大于等于第pro_control个最大值的概率的索引。
+    # 确定大于等于第control_step个最大值的概率的索引。
     indices = [index for index, prob in enumerate(probilities) if prob >= bigger_probilities]
     for index in indices:
         factor = round(probilities[index] / sum_prob)
@@ -175,7 +184,7 @@ def kmc_loop(result_queue, t_control, nsteps, events, events_num, ini, total_rat
     t, i, events= kmc_iteration(t_control, nsteps, events, events_num, ini, total_rate, rates)
     result_queue.put([t, i, events])
 
-def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin, events_num, barriers, jumpfreqs) -> None:
+def main_loop(pw, control_step, t_control, nsteps, repeat_run, T, repeating_number, events_origin, events_num, barriers, jumpfreqs) -> None:
     print(f"Start {T} K main loop.")
     # 计算运行时间.
     start=time.time()
@@ -183,7 +192,7 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
     step_outcome = []
     barriers_ex = list_extend(barriers, repeating_number)
     jumpfreqs_ex = list_extend(jumpfreqs, repeating_number)
-    total_rate, rates = rate(T, barriers_ex, jumpfreqs_ex, pw=True)
+    total_rate, rates = rate(T, barriers_ex, jumpfreqs_ex, pw, control_step)
     # 在kMC循环处引入多线程, 即repeat_run次重复分别放在不同的处理器上跑.
     # 默认进程数为调用的核数.
     manager = mp.Manager()
@@ -206,6 +215,8 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
             break
         results.append(result)
     for result in results:
+        #events_data = pd.DataFrame(result[2])
+        #events_data.to_csv("./events_new.csv", index=False)
         displacement = cal_displacement(result[2], events_num)
         step_outcome.append([result[0], result[1], displacement[0], displacement[1], displacement[2]])
     end = time.time()
@@ -216,15 +227,15 @@ def main_loop(t_control, nsteps, repeat_run, T, repeating_number, events_origin,
 
 def main():
     # 输入数据.
-    repeat_run, nsteps, T_list, barriers, jumpfreqs, select_path = input.read_input()
-    t_control_list = np.ones(len(T_list))*1E8
+    pw, event_gen_mode, control_step, repeat_run, nsteps, T_list, barriers, jumpfreqs, select_path = input.read_input()
+    t_control_list = np.ones(len(T_list))*1E30
     # 初始化事件.
-    repeating_number, events_origin = gen_events(select_path, True)
+    repeating_number, events_origin = gen_events(select_path, event_gen_mode)
     events_num = sum(repeating_number)
     # 预先调用kmc_iteration保证numba提前对kmc和kmc_iteration编译, 确保不和多线程产生冲突.
     _ = kmc_iteration(1, 1, np.array([[0, 1, 0],[1, 0, 0]]), 1, 0, 1E12, [1E12])
     for i in range(len(T_list)):
-        main_loop(t_control_list[i], nsteps, repeat_run, T_list[i], repeating_number, events_origin, events_num, barriers, jumpfreqs)
+        main_loop(pw, control_step, t_control_list[i], nsteps, repeat_run, T_list[i], repeating_number, events_origin, events_num, barriers, jumpfreqs)
 
 if __name__ == "__main__":
     main()

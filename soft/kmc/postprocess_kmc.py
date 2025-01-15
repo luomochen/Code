@@ -14,6 +14,7 @@ from ase.io import vasp
 from scipy.optimize import curve_fit
 from scipy.constants import physical_constants
 
+import input
 def convert_ndarray(data, column_name):
     numeric = pd.to_numeric(data[column_name])
     ndarray = np.array(numeric.tolist())
@@ -73,7 +74,8 @@ def diffusion_coefficient(T):
     mean_diffusion_coeff = np.append(mean_diffusion_coeff, np.sum(mean_diffusion_coeff)/3)
     return mean_diffusion_coeff
 
-def plot_tem_diffusivity_graph(slope, intercept, barrier, Rsquared, diffusion_coeffs, reciprocal_T_list):
+def processed_data_output(slope, intercept, Rsquared, barrier, D0, diffusion_coeffs, reciprocal_T_list) -> None:
+    # Plot
     x_data = np.linspace(min(reciprocal_T_list)-0.1, max(reciprocal_T_list)+0.1, 1000)
     y_data = linear_func(x_data, slope, intercept)
     fig, ax = plt.subplots(figsize=(10, 8), dpi=150)
@@ -84,28 +86,20 @@ def plot_tem_diffusivity_graph(slope, intercept, barrier, Rsquared, diffusion_co
                facecolors='white', s=100, linewidths=2, zorder=2)
     ax.plot(x_data, y_data, c="black", linewidth=3, zorder=1)
     ax.set_title(f"Barrier_fit = {round(barrier, 3)} eV", fontsize=20)
-    func_text = f"y = {slope:.2f}x + {intercept:.2f}"
-    ax.text(np.median(x_data), np.median(y_data), func_text, fontsize=25, color='red')
+    func_text = f"y = {slope:.2f}x + {intercept:.2f}\n$R^2$ = {Rsquared:.3f}"
+    ax.text(np.median(x_data)+0.1, np.median(y_data)+0.1, func_text, fontsize=25, color='red')
     ax.grid(True)
     fig.savefig("linear_fit.png")
+    # Output the fitted data.
+    with open ("process_kmc.dat", 'w') as output:
+        output.write(f"Linear_fit: {slope}*x+{intercept}\n")
+        output.write(f"R_squared: {Rsquared}\n")
+        output.write(f"Diffusion_barrier: {barrier} eV\n")
+        output.write(f"Prefactor: {D0}")
     plt.show()
 
 def main():
-    #crystal_orientation = [0, 0, 1]
-    #T_list = [300, 500, 700, 1000, 1500, 2000, 2500, 3000]
-    #diffusion_coeffs = []
-    #for T in T_list:
-    #    coeff = diffusion_coefficient_in_crystal_orientation(T, crystal_orientation, 'sites.vasp')
-    #    diffusion_coeffs.append(np.log10(coeff))
-    #reciprocal_T_list = 1000 / np.array(T_list)
-    #diffusion_coeffs = np.array(diffusion_coeffs)
-    #slope, intercept, barrier, D0 = linear_fit(reciprocal_T_list, diffusion_coeffs)
-    #Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs)
-    #designated_T = 1000 / (285+273.15)
-    #lg10D = designated_T*slope + intercept
-    #D = 10**lg10D
-    #print(D)
-    T_list = [300, 500, 700, 1000, 1500, 2000, 2500, 3000]
+    _, _, _, _, _, T_list, _, _, _= input.read_input()
     diffusion_coeffs = []
     for T in T_list:
         coeff = diffusion_coefficient(T)
@@ -114,13 +108,19 @@ def main():
     diffusion_coeffs = np.array(diffusion_coeffs)
     slope, intercept, barrier, D0 = linear_fit(reciprocal_T_list, diffusion_coeffs[:,3])
     Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs[:,3])
-    plot_tem_diffusivity_graph(slope, intercept, barrier, Rsquared, 
+    processed_data_output(slope, intercept, Rsquared, barrier, D0,
                                diffusion_coeffs[:,3], reciprocal_T_list)
-    with open ("process_kmc.dat", 'a') as output:
-        output.write(f"Linear_fit: {slope}*x+{intercept}\n")
-        output.write(f"R_squared: {Rsquared}\n")
-        output.write(f"Diffusion_barrier: {barrier} eV\n")
-        output.write(f"Prefactor: {D0}")
-
+    #crystal_orientation = [1, 0, 0]
+    #diffusion_coeffs = []
+    #for T in T_list:
+    #    coeff = diffusion_coefficient_in_crystal_orientation(T, crystal_orientation, 'sites.vasp')
+    #    diffusion_coeffs.append(np.log10(coeff))
+    #reciprocal_T_list = 1000 / np.array(T_list)
+    #diffusion_coeffs = np.array(diffusion_coeffs)
+    #slope, intercept, barrier, D0 = linear_fit(reciprocal_T_list, diffusion_coeffs)
+    #Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs)
+    #processed_data_output(slope, intercept, Rsquared, barrier, D0,
+    #                           diffusion_coeffs, reciprocal_T_list)
+    
 if __name__ == "__main__":
     main()

@@ -16,14 +16,16 @@ import pandas as pd
 from subprocess import getstatusoutput
 from scipy.constants import physical_constants
 
-def get_saddle_point_number():
+def get_calculated_point():
     files = os.listdir()
-    saddle_number = 0
-    stable_number = 0
+    saddle_file_name_list = []
+    stable_file_name_list = []
     for file in files:
-        if re.match(r"saddle_\d", file):
-            saddle_number = saddle_number + 1
-    return saddle_number
+        if re.match(r"^saddle(_\d+(\.\d+)?)?$", file):
+            saddle_file_name_list.append(file)
+        elif re.match(r"^stable(_\d+(\.\d+)?)?$", file):
+            stable_file_name_list.append(file)
+    return stable_file_name_list, saddle_file_name_list
 
 def get_frequency(filename):
     """Get frequency from VASP OUTCAR
@@ -52,50 +54,47 @@ def zero_energy(f_list):
     total_zero_energy = np.sum(f_list)
     return total_zero_energy
 
-def process_freq_calculation() -> None:
-    stable_site_path = input("Please designate the path of stable site: ")
-    if not stable_site_path.strip(): 
-        stable_site_path = 'stable'
-    point_number = get_saddle_point_number()
-    jump_probability_list = []
-    zero_energy_list = []
-    img_freq_list = []
-    real_freq_list = []
-    f_list_stable, fi_list_stable  = get_frequency(stable_site_path+'/OUTCAR')
-    img_freq_list.append(fi_list_stable)
-    real_freq_list.append(f_list_stable)
-    stable_freq_number= len(f_list_stable)
-    zero_energy_stable = zero_energy(f_list_stable)
-    for saddle in range(point_number):
-        f_list_saddle, fi_list_saddle = get_frequency('saddle_'+str(saddle+1)+'/OUTCAR')
-        img_freq_list.append(fi_list_saddle)
-        real_freq_list.append(f_list_saddle)
-        zero_energy_saddle = zero_energy(f_list_saddle)
-        saddle_freq_number = len(f_list_saddle)
-        jump_probability = 1
-        for i in range(saddle_freq_number):
-            jump_probability = jump_probability * f_list_stable[i] / f_list_saddle[i]
-        number_diff = stable_freq_number - saddle_freq_number
-        if number_diff > 0:
-            for j in range(abs(number_diff)):
-                jump_probability = jump_probability * f_list_stable[-(j+1)]
-        elif number_diff < 0:
-            for j in range(abs(number_diff)):
-                jump_probability = jump_probability * f_list_saddle[-(j+1)]
-        zero_energy_difference = zero_energy_saddle - zero_energy_stable
-        zero_energy_list.append(zero_energy_difference)
-        jump_probability_list.append(round(jump_probability,5))
-    reaction_data = pd.DataFrame({"Jump_probability (THz)": jump_probability_list, 
-                                  "Zero_energy_difference (eV)": zero_energy_list})
-    reaction_data.to_csv('jump_freq.csv', index=False)
-    img_freq_data = pd.DataFrame(img_freq_list).transpose()
-    img_freq_data.to_csv('img_freq.csv', index=False)
-    real_freq_data = pd.DataFrame(real_freq_list).transpose()
-    real_freq_data.to_csv('real_freq.csv', index=False)
-    print('Jump&img&real_freq.csv is generated!')
+def process_freq_calculation(stable_file_name_list, saddle_file_name_list) -> None:
+    #img_freq_data = pd.DataFrame()
+    #real_freq_data = pd.DataFrame()
+    for stable_point in stable_file_name_list:
+        jump_probability_list = []
+        zero_energy_list = []
+        f_list_stable, fi_list_stable  = get_frequency(stable_point+'/OUTCAR')
+        #img_freq_data[stable_point] = fi_list_stable
+        #real_freq_data[stable_point] = f_list_stable
+        stable_freq_number= len(f_list_stable)
+        zero_energy_stable = zero_energy(f_list_stable)
+        for saddle_point in saddle_file_name_list:
+            f_list_saddle, fi_list_saddle = get_frequency(saddle_point+'/OUTCAR')
+            #if stable_point == stable_file_name_list[0]:
+                #img_freq_data[saddle_point] = fi_list_saddle
+                #real_freq_data[saddle_point] = f_list_saddle
+            zero_energy_saddle = zero_energy(f_list_saddle)
+            saddle_freq_number = len(f_list_saddle)
+            jump_probability = 1
+            for i in range(saddle_freq_number):
+                jump_probability = jump_probability * f_list_stable[i] / f_list_saddle[i]
+            number_diff = stable_freq_number - saddle_freq_number
+            if number_diff > 0:
+                for j in range(abs(number_diff)):
+                    jump_probability = jump_probability * f_list_stable[-(j+1)]
+            elif number_diff < 0:
+                for j in range(abs(number_diff)):
+                    jump_probability = jump_probability * f_list_saddle[-(j+1)]
+            zero_energy_difference = zero_energy_saddle - zero_energy_stable
+            zero_energy_list.append(zero_energy_difference)
+            jump_probability_list.append(round(jump_probability,5))
+        reaction_data = pd.DataFrame({"Saddle_point_name": saddle_file_name_list,
+                                      "Jump_probability (THz)": jump_probability_list, 
+                                      "Zero_energy_difference (eV)": zero_energy_list})
+        reaction_data.to_csv(stable_point+'_jump_freq.csv', index=False)
+    #img_freq_data.to_csv('img_freq.csv', index=False)
+    #real_freq_data.to_csv('real_freq.csv', index=False)
 
 def main() -> None:
-    process_freq_calculation()
+    stable_file_name_list, saddle_file_name_list = get_calculated_point()
+    process_freq_calculation(stable_file_name_list, saddle_file_name_list)
 
 if __name__ == "__main__":
     main()
