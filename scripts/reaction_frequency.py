@@ -8,93 +8,143 @@
 # miu_1*mu_2*...miu_n-1*miu_n/miu'_1*miu'_2...miu_n-1 to calculate the 
 # reaction frequency.
 # New function: Calculate the zero point energy.
+# New function2: Calculate the correction coefficient of Quantum harmonic 
+# oscillator.
+# New function3: Calculate the  crossover temperature, Tc, Below this 
+# crossover temperature, tunneling can make a signiﬁcant contribution 
+# to the total rate, while above this temperature tunneling can be
+# neglected.
 #----------------------------------------------------------------------
 import os
 import re
+import yaml
 import numpy as np
-import pandas as pd
-from subprocess import getstatusoutput
 from scipy.constants import physical_constants
 
 def get_calculated_point():
+    """
+    Identify folders matching 'stable', 'stable_#', 'saddle', or 'saddle_#'.
+    These are considered calculation directories.
+    """
     files = os.listdir()
-    saddle_file_name_list = []
-    stable_file_name_list = []
-    for file in files:
-        if re.match(r"^saddle(_\d+(\.\d+)?)?$", file):
-            saddle_file_name_list.append(file)
-        elif re.match(r"^stable(_\d+(\.\d+)?)?$", file):
-            stable_file_name_list.append(file)
-    return stable_file_name_list, saddle_file_name_list
+    saddle_list = [f for f in files if re.match(r"^saddle(_\d+(\.\d+)?)?$", f)]
+    stable_list = [f for f in files if re.match(r"^stable(_\d+(\.\d+)?)?$", f)]
+    return stable_list, saddle_list
 
-def get_frequency(filename):
-    """Get frequency from VASP OUTCAR
+def get_frequency(filename, max_lines=100000):
     """
-    input = "gawk '/THz/' " + filename
-    get_frequency = getstatusoutput(input)
-    if get_frequency[0] == 0:
-        f_list = re.findall(r"f  =(.+?)THz", get_frequency[1])
-        try:
-            f_list = np.array([float(frequency.strip()) for frequency in f_list])
-        except ValueError as e:
-            raise e
-        fi_list = re.findall(r"f/i=(.+?)THz", get_frequency[1])
-        try:
-            fi_list = np.array([float(frequency.strip()) for frequency in fi_list])
-        except ValueError as e:
-            raise e
-        return f_list, fi_list
-    else:
-        raise ValueError
-
-def zero_energy(f_list):
-    """Calculate the zero energy.
+    Extract real and imaginary frequencies from OUTCAR (in THz).
+    Reads only the last `max_lines` lines for performance.
     """
-    f_list = f_list * (10**12) * physical_constants["Planck constant in eV s"][0] * 0.5
-    total_zero_energy = np.sum(f_list)
-    return total_zero_energy
+    f_list, fi_list = [], []
+    try:
+        with open(os.path.join(filename, "OUTCAR"), 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, os.SEEK_END)
+            file_size = f.tell()
+            block_size = 1024
+            blocks, lines_found = [], 0
 
-def process_freq_calculation(stable_file_name_list, saddle_file_name_list) -> None:
-    #img_freq_data = pd.DataFrame()
-    #real_freq_data = pd.DataFrame()
-    for stable_point in stable_file_name_list:
-        jump_probability_list = []
-        zero_energy_list = []
-        f_list_stable, fi_list_stable  = get_frequency(stable_point+'/OUTCAR')
-        #img_freq_data[stable_point] = fi_list_stable
-        #real_freq_data[stable_point] = f_list_stable
-        stable_freq_number= len(f_list_stable)
-        zero_energy_stable = zero_energy(f_list_stable)
-        for saddle_point in saddle_file_name_list:
-            f_list_saddle, fi_list_saddle = get_frequency(saddle_point+'/OUTCAR')
-            #if stable_point == stable_file_name_list[0]:
-                #img_freq_data[saddle_point] = fi_list_saddle
-                #real_freq_data[saddle_point] = f_list_saddle
-            zero_energy_saddle = zero_energy(f_list_saddle)
-            saddle_freq_number = len(f_list_saddle)
-            jump_probability = 1
-            for i in range(saddle_freq_number):
-                jump_probability = jump_probability * f_list_stable[i] / f_list_saddle[i]
-            number_diff = stable_freq_number - saddle_freq_number
-            if number_diff > 0:
-                for j in range(abs(number_diff)):
-                    jump_probability = jump_probability * f_list_stable[-(j+1)]
-            elif number_diff < 0:
-                for j in range(abs(number_diff)):
-                    jump_probability = jump_probability * f_list_saddle[-(j+1)]
-            zero_energy_difference = zero_energy_saddle - zero_energy_stable
-            zero_energy_list.append(zero_energy_difference)
-            jump_probability_list.append(round(jump_probability,5))
-        reaction_data = pd.DataFrame({"Saddle_point_name": saddle_file_name_list,
-                                      "Jump_probability (THz)": jump_probability_list, 
-                                      "Zero_energy_difference (eV)": zero_energy_list})
-        reaction_data.to_csv(stable_point+'_jump_freq.csv', index=False)
-    #img_freq_data.to_csv('img_freq.csv', index=False)
-    #real_freq_data.to_csv('real_freq.csv', index=False)
+            while file_size > 0 and lines_found < max_lines:
+                file_size = max(0, file_size - block_size)
+                f.seek(file_size)
+                block = f.read(block_size)
+                blocks.append(block)
+                lines_found = sum(block.count('\n') for block in blocks)
 
-def main() -> None:
-    stable_file_name_list, saddle_file_name_list = get_calculated_point()
-    process_freq_calculation(stable_file_name_list, saddle_file_name_list)
+            tail = ''.join(reversed(blocks)).splitlines()[-max_lines:]
+    except Exception:
+        with open(os.path.join(filename, "OUTCAR"), 'r', encoding='utf-8', errors='ignore') as f:
+            tail = f.readlines()
+
+    for line in tail:
+        if "THz" in line and "f" in line:
+            match_real = re.search(r"f\s+=\s*([-+]?[0-9]*\.?[0-9]+)", line)
+            match_img = re.search(r"f/i=\s*([-+]?[0-9]*\.?[0-9]+)", line)
+            if match_real:
+                f_list.append(float(match_real.group(1)))
+            if match_img:
+                fi_list.append(float(match_img.group(1)))
+    return np.array(f_list), np.array(fi_list)
+
+def zero_point_energy(freq_THz):
+    """
+    Compute total zero-point energy (ZPE) from vibrational frequencies (THz).
+    ZPE = 0.5 * h * nu
+    """
+    freq_Hz = freq_THz * 1e12
+    zpe = 0.5 * physical_constants["Planck constant in eV s"][0] * freq_Hz
+    return zpe.sum()
+
+def quantum_correction(freq_THz, T):
+    """
+    Compute quantum statistical correction factor at temperature T (K).
+    sinh(h$/mu/$2kT) / (h$/mu$/2kT)
+    """
+    freq_Hz = freq_THz * 1e12
+    h = physical_constants["Planck constant"][0]
+    kB = physical_constants["Boltzmann constant"][0]
+    x = 0.5 * h * freq_Hz / (kB * T)
+    return np.sinh(x) / x
+
+def jump_freq(stable_f, saddle_f):
+    """
+    Calculate raw TST reaction rate constant k0 using frequency ratios.
+    """
+    # Here can not to use np.prod function, because it number is too huge,
+    # which will bring overflow. 
+    log_k0 = np.sum(np.log(stable_f)) - np.sum(np.log(saddle_f))
+    return np.exp(log_k0)
+
+def jump_freq_zpe_correction(stable_f, saddle_f, T):
+    """
+    Calculate quantum correction factor to k0 at temperature T.
+    """
+    stable_corr = quantum_correction(stable_f, T)
+    saddle_corr = quantum_correction(saddle_f, T)  
+    log_corr = np.sum(np.log(stable_corr)) - np.sum(np.log(saddle_corr))
+    return np.exp(log_corr)
+
+def crossover_tem():
+    pass
+
+def main():
+    stable_dirs, saddle_dirs = get_calculated_point()
+    if not stable_dirs or not saddle_dirs:
+        raise RuntimeError("Folders named 'stable' or 'saddle' not found.")
+
+    temperatures = [200, 300, 400, 500, 600, 800, 1000, 1400, 1800, 2200]
+    output_data = []
+
+    for stable in stable_dirs:
+        stable_f, _ = get_frequency(stable)
+        zpe_stable = zero_point_energy(stable_f)
+
+        for saddle in saddle_dirs:
+            saddle_f, fi_saddle = get_frequency(saddle)
+            zpe_saddle = zero_point_energy(saddle_f)
+
+            zpe_corr = zpe_saddle - zpe_stable
+            k0 = jump_freq(stable_f, saddle_f)
+            correction_factors = {}
+
+            for T in temperatures:
+                corr = jump_freq_zpe_correction(stable_f, saddle_f, T)
+                correction_factors[T] = float(corr)
+
+            entry = {
+                "stable": stable,
+                "saddle": saddle,
+                "zpe_correction (eV)": float(zpe_corr),
+                "k0 (TST rate constant)": float(k0),
+                "quantum_corrections": correction_factors
+            }
+            output_data.append(entry)
+
+    # Write to YAML file
+    with open("reaction_rates.yaml", "w", encoding='utf-8') as f:
+        yaml.dump(output_data, f, allow_unicode=True, sort_keys=False)
+
+    print("Results saved to reaction_rates.yaml")
 
 if __name__ == "__main__":
     main()
