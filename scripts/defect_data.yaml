@@ -1,0 +1,38 @@
+VBM: 0.6470 # eV, reference point
+CBM: 6.3346 # eV
+Gap: 5.6877  # eV, the VBM value relative to vacuum
+high_frequency_dielectric: 
+  - [2.414217, 0.0, 0.0]
+  - [0.0, 2.414217, 0.0]
+  - [0.0, 0.0, 2.442856]  # 3x3 matrix
+ionic_dielectric: 
+  - [2.102878, -0.000092, 0.0]
+  - [-0.000092, 2.102864, 0.0]
+  - [0.0, 0.0, 2.302202]  # 3x3 matrix
+host_energy: -863.98286403  # total energy of the perfect cell
+host_path: './pft_vdw'
+defects:
+  - name: H_i^+
+    charge: 1
+    energy: -870.06023600
+    chemical_potential: -3.5070 # μ_H_vdw
+    path: "./Hi+_vdw"
+
+  - name: H_i^-
+    charge: -1
+    energy: -861.24305732
+    chemical_potential: -3.5070
+    path: "./Hi-_vdw"
+
+  - name: H_i
+    charge: 0
+    energy: -864.83797957
+    chemical_potential: -3.5070
+    path: "./Hi_vdw"
+
+  - name: H_{2i}
+    charge: 0
+    energy: -870.11647946
+    chemical_potential: -7.0140
+    path: "./H2i_vdw"
+  

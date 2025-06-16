@@ -39,6 +39,8 @@ def image_distance(directs1, directs2, latt_vec_matrix):
     return differences
 
 def neb_data_process():
+    """Process the outcome.
+    """
     # List all the files in the directory.
     # Use the regular expersion to match the filename
     # and find the image created in the path.
@@ -47,12 +49,12 @@ def neb_data_process():
     files = os.listdir()
     image_number = 0
     for file in files:
-        if re.match(r"0\d", file):
+        if re.match(r"\d", file):
             image_number = image_number + 1
 
     for i in range(image_number):
         # Use ase to read the OUTCAR.
-        image = vasp.read_vasp_out("0" + str(i) + "/OUTCAR")
+        image = vasp.read_vasp_out(f"{i:02d}/OUTCAR")
         latt_vec_matrix = image.cell
         free_energy = image.get_total_energy()
         directs = image.get_scaled_positions()
@@ -95,7 +97,7 @@ def creat_saddle_point(free_energy_diff_list):
     barrier = max(free_energy_diff_list)
     saddle_point = free_energy_diff_list.index(barrier)
     os.makedirs('saddle', exist_ok=True)
-    status, output = getstatusoutput("cp 0"+str(saddle_point)+"/CONTCAR saddle/POSCAR")
+    status, output = getstatusoutput(f"cp {saddle_point:02d}/CONTCAR saddle/POSCAR")
     if status == 0:
         print(f'\nSaddle point is in image {saddle_point}.')
         print(f'The energy barrier is {round(barrier, 3)} eV.')
@@ -122,7 +124,10 @@ def plot_reaction_path_graph(dist_list, free_energy_diff_list):
                facecolors='white', s=400, linewidths=3, zorder=2)
     ax.plot(xs, ys, c="black", linewidth=3, zorder=1)
     ax.grid(True)
+    
+    fig.tight_layout()
     fig.savefig("neboutcome.png")
+    
     plt.show()
     
 def main():
