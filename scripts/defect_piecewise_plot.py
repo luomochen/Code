@@ -94,7 +94,7 @@ def plot_segments(segments, fermi_max=1.0, filename="piecewise_plot.png"):
                 break
     
     fig, ax = plt.subplots(figsize=(8, 10))
-    ax.plot(ef_values, energies, color='red', linewidth=3)
+    ax.plot(ef_values, energies, label="_nolegend_", color='red', linewidth=3)
     for seg in segments:
         ef0, ef1 = seg["Ef_range"]
         ef_mid = (ef0 + ef1) / 2
@@ -111,7 +111,6 @@ def plot_segments(segments, fermi_max=1.0, filename="piecewise_plot.png"):
     ax.set_ylabel("$\mathrm{\Delta H}$ (eV)", fontsize=20)
     ax.set_title("Defect formation enthalpy (minimum envelope)", fontsize=20)
     ax.grid(True)
-    ax.legend()
     
     fig.tight_layout()
     fig.savefig(filename, dpi=300)
