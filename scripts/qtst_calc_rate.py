@@ -22,7 +22,7 @@ def load_input_from_yaml(filepath):
 
     # Read the input parameters.
     temperatures = data.get("temperatures", [300])
-    output_file = data.get("output_file", "reaction_rates.yaml")
+    output_file = data.get("output_file", "qtst_rates.yaml")
 
     return temperatures, output_file
 
@@ -30,6 +30,7 @@ def imag_freq_check(saddle_fi):
     """Avoid incorrect saddle points with more than one large imaginary frequency.
     """
     second_large_fi = np.partition(np.unique(saddle_fi), -2)[-2]
+    print(second_large_fi)
     if second_large_fi > 0.6:
         raise ValueError(
             f"The second largest imaginary frequency is {second_large_fi} THz, "
@@ -86,7 +87,6 @@ def get_calculated_point():
             stable_list.append(match.group(1))
         elif match := saddle_pattern.match(f):
             saddle_list.append(match.group(1))
-
     return stable_list, saddle_list
 
 def load_freq(name):
@@ -101,12 +101,11 @@ def load_freq(name):
 def main():
     # The user can disignate the input file name.
     parser = argparse.ArgumentParser(description="Run tunneling correction using YAML input.")
-    parser.add_argument("--input", type=str, default="input.yaml", help="Path to input YAML file")
+    parser.add_argument("--input", type=str, default="qtst_input.yaml", help="Path to input YAML file")
     args = parser.parse_args()
 
     temperatures, output_file = load_input_from_yaml(args.input)
     stable_dirs, saddle_dirs = get_calculated_point()
-    print(stable_dirs, saddle_dirs)
     if not stable_dirs or not saddle_dirs:
         raise RuntimeError("No *_f.yaml files found.")
 
@@ -127,7 +126,6 @@ def main():
             for T in temperatures:
                 corr = jump_freq_zpe_correction(stable_f, saddle_f, T)
                 correction_factors[T] = float(corr)
-            print(correction_factors)
             entry = {
                 "stable": stable,
                 "saddle": saddle,

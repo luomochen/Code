@@ -25,7 +25,7 @@ def load_input_from_yaml(filepath):
     i_omega = np.float64(data["i_omega"]*10**12)
     down_limit = data.get("down_limit", -np.inf)
     temperatures = data.get("temperatures", [300])
-    output_file = data.get("output_file", "output.yaml")
+    output_file = data.get("output_file", "qtst_tunning.yaml")
 
     return deltaE0, i_omega, down_limit, temperatures, output_file
 
@@ -56,7 +56,7 @@ def save_to_yaml(file_name, deltaE0, i_omega, down_limit, temperatures, correcti
     data = {
         "input_parameters": {
             "deltaE0 (eV)": str(deltaE0),
-            "i_omega (THz)": str(i_omega),
+            "i_omega (THz)": str(i_omega/(10**12)),
             "down_limit": str(down_limit)
         },
         "results": {
@@ -77,7 +77,7 @@ def main():
     print("--------Hydrogen and its isotopes-----------")
     
     parser = argparse.ArgumentParser(description="Run tunneling correction using YAML input.")
-    parser.add_argument("--input", type=str, default="input.yaml", help="Path to input YAML file")
+    parser.add_argument("--input", type=str, default="qtst_input.yaml", help="Path to input YAML file")
     args = parser.parse_args()
 
     deltaE0, i_omega, down_limit, temperatures, output_file = load_input_from_yaml(args.input)
@@ -88,11 +88,13 @@ def main():
         gamma, err = tunneling_correction(T, deltaE0, i_omega, down_limit)
         corrections.append(gamma)
         errors.append(err)
-
     Tc = crossover_temperature(deltaE0, i_omega)
     save_to_yaml(output_file, deltaE0, i_omega, down_limit, temperatures, corrections, errors, Tc)
 
-    print(f"Results written to {output_file}")
+    print(f"----Results written to {output_file}----")
+    print("------------------Tips----------------------")
+    print("----------If you meet overflow--------------")
+    print("-----you can increase the down_limit--------")
 
 if __name__ == "__main__":
     main()
