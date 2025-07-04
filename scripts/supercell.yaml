@@ -1,0 +1,27 @@
+primitive_structure_file: CaCl2.vasp
+expand_times: 12
+element_order:
+- Si
+- O
+supercell_shape: fcc
+supercell_matrix:
+- - 0
+  - 1
+  - 2
+- - 2
+  - 0
+  - 2
+- - 2
+  - 2
+  - 0
+transposed_matrix:
+- - 0
+  - 2
+  - 2
+- - 1
+  - 0
+  - 2
+- - 2
+  - 2
+  - 0
+note: 'Matrix format: ASE uses P matrix, Phonopy/VESTA use P.T'

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#--------------------------------------------------
+#----------------------------------------------------------------
 # This script is used for calculating the quantum 
 # tunneling correction factors of reaction rates.
-#--------------------------------------------------
+# J. T. Fermann and S. Auerbach, J. Chem. Phys. 112, 6787 (2000).
+#----------------------------------------------------------------
 import numpy as np
 import argparse
 import yaml

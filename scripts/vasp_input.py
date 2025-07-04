@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 #-----------------------------------------------
-# Automatically setting KPOINTS and POTCAR
+# Command-line tool: set_vasp_input -k 20 20 20
+# Automatically sets KPOINTS and POTCAR
 #-----------------------------------------------
 from pymatgen.io.vasp import Poscar, Kpoints, Potcar
 
