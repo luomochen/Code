@@ -30,7 +30,7 @@ def imag_freq_check(saddle_fi):
     """Avoid incorrect saddle points with more than one large imaginary frequency.
     """
     second_large_fi = np.partition(np.unique(saddle_fi), -2)[-2]
-    print(second_large_fi)
+    print(f"The second largest imaginary frequency: {second_large_fi} THz, ingorned.")
     if second_large_fi > 0.6:
         raise ValueError(
             f"The second largest imaginary frequency is {second_large_fi} THz, "

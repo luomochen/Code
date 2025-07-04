@@ -1,5 +1,5 @@
-deltaE0: 0.0486
-i_omega: 17.092786
+deltaE0: 0.65
+i_omega: 46.41
 #down_limit: -100
-temperatures: [200, 300, 400, 500, 600, 800, 1000, 1400, 1800, 2200]
+temperatures: [200,300,400,500,600]
 #output_file: qtst_tunneling.yaml
