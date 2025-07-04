@@ -14,7 +14,7 @@ from ase.io import vasp
 from scipy.optimize import curve_fit
 from scipy.constants import physical_constants
 
-import input
+import parse
 def convert_ndarray(data, column_name):
     numeric = pd.to_numeric(data[column_name])
     ndarray = np.array(numeric.tolist())
@@ -99,7 +99,7 @@ def processed_data_output(slope, intercept, Rsquared, barrier, D0, diffusion_coe
     plt.show()
 
 def main():
-    _, _, _, _, _, T_list, _, _, _= input.read_input()
+    _, _, _, _, _, T_list, _, _, _= parse.read_input()
     diffusion_coeffs = []
     for T in T_list:
         coeff = diffusion_coefficient(T)
@@ -110,17 +110,17 @@ def main():
     Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs[:,3])
     processed_data_output(slope, intercept, Rsquared, barrier, D0,
                                diffusion_coeffs[:,3], reciprocal_T_list)
-    #crystal_orientation = [1, 0, 0]
-    #diffusion_coeffs = []
-    #for T in T_list:
-    #    coeff = diffusion_coefficient_in_crystal_orientation(T, crystal_orientation, 'sites.vasp')
-    #    diffusion_coeffs.append(np.log10(coeff))
-    #reciprocal_T_list = 1000 / np.array(T_list)
-    #diffusion_coeffs = np.array(diffusion_coeffs)
-    #slope, intercept, barrier, D0 = linear_fit(reciprocal_T_list, diffusion_coeffs)
-    #Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs)
-    #processed_data_output(slope, intercept, Rsquared, barrier, D0,
-    #                           diffusion_coeffs, reciprocal_T_list)
+    crystal_orientation = [1, 0, 0]
+    diffusion_coeffs = []
+    for T in T_list:
+        coeff = diffusion_coefficient_in_crystal_orientation(T, crystal_orientation, 'sites.vasp')
+        diffusion_coeffs.append(np.log10(coeff))
+    reciprocal_T_list = 1000 / np.array(T_list)
+    diffusion_coeffs = np.array(diffusion_coeffs)
+    slope, intercept, barrier, D0 = linear_fit(reciprocal_T_list, diffusion_coeffs)
+    Rsquared = r_squared(slope, intercept, reciprocal_T_list, diffusion_coeffs)
+    processed_data_output(slope, intercept, Rsquared, barrier, D0,
+                               diffusion_coeffs, reciprocal_T_list)
     
 if __name__ == "__main__":
     main()

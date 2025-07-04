@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 #-------------------------------------------------------------
-# This script is used to identify space groups
+# This script is used to identify space groups.
 #-------------------------------------------------------------
 import os
 import re

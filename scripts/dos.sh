@@ -2,7 +2,7 @@
 #-----------------------------------------------
 # Use vaspkit to generate processed data of dos.
 #-----------------------------------------------
-ELEMENTS='Zr O'
+ELEMENTS='Si O H'
 ORBITALS=('s' 'py pz px' 'dxy dyz dz2 dxz dx2-y2')
 for E in $ELEMENTS
 do

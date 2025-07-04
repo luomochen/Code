@@ -13,7 +13,7 @@ from ase import Atoms
 from ase.io import vasp
 from ase.build import make_supercell
 
-from make_supercell import sort_atoms
+from supercell import sort_atoms
 
 def clean(filepath):
     """Clean old file.

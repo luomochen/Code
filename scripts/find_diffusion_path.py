@@ -11,7 +11,7 @@ from ase import spacegroup
 from ase.io import vasp
 from ase.build import make_supercell
 
-from make_supercell import sort_atoms
+from supercell import sort_atoms
 
 def backtocell(Direct):
     """Move the direct coordinate into the cell.

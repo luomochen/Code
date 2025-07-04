@@ -18,7 +18,7 @@ from numba import njit
 from scipy.constants import physical_constants
 from ase.io import vasp 
 
-import input
+import parse
 
 def list_extend(list, repeating_num):
     """
@@ -227,7 +227,8 @@ def main_loop(pw, control_step, t_control, nsteps, repeat_run, T, repeating_numb
 
 def main():
     # 输入数据.
-    pw, event_gen_mode, control_step, repeat_run, nsteps, T_list, barriers, jumpfreqs, select_path = input.read_input()
+    pw, events_mode, control_step, repeat_run, nsteps, quantum_correction, \
+            T_list, barriers, select_path = parse.parse_input('input.yaml')
     t_control_list = np.ones(len(T_list))*1E30
     # 初始化事件.
     repeating_number, events_origin = gen_events(select_path, event_gen_mode)
